@@ -4,7 +4,7 @@ from matchms import Spectrum
 from matchms.similarity import ModifiedCosine
 from matchms import calculate_scores
 
-from scr.bootstrapping.bootstrapping import boostrap_spectra_replacement
+from lattice.bootstrapping.bootstrapping import boostrap_spectra_replacement
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 

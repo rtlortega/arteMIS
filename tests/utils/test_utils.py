@@ -1,7 +1,7 @@
 import warnings
 
 from rdkit import DataStructs
-from scr.utils.fps import smiles_to_morgan_fps
+from lattice.utils.fps import smiles_to_morgan_fps
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 

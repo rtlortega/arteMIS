@@ -4,11 +4,11 @@ from rdkit.Chem import AllChem
 import networkx as nx
 import warnings
 
-from scr.evaluation.chemistry_metrics import calculate_intra_inter_similarity
-from scr.evaluation.chemistry_metrics import calculate_edge_purity
-from scr.evaluation.chemistry_metrics import calculate_component_purity
-from scr.evaluation.chemistry_metrics import calculate_network_accuracy_score
-from scr.evaluation.chemistry_metrics import calculate_consistency_measurement
+from lattice.evaluation.chemistry_metrics import calculate_intra_inter_similarity
+from lattice.evaluation.chemistry_metrics import calculate_edge_purity
+from lattice.evaluation.chemistry_metrics import calculate_component_purity
+from lattice.evaluation.chemistry_metrics import calculate_network_accuracy_score
+from lattice.evaluation.chemistry_metrics import calculate_consistency_measurement
 
 
 def test_calculate_intra_inter_similarity():
