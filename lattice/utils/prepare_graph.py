@@ -15,6 +15,9 @@ def prepare_graph_class(
     Returns:
     networkx.Graph: The prepared graph with chemical class attributes.
     """
+    if G is None or df is None:
+        raise ValueError("Graph and DataFrame must not be None.")
+
     attributes_key = dict(zip(df[key], df[attribute]))
     attributes_key_str = {str(k): v for k, v in attributes_key.items()}
 
@@ -38,6 +41,9 @@ def prepare_graph_fps(
     Returns:
     networkx.Graph: The prepared graph with chemical class attributes.
     """
+    if G is None or df is None:
+        raise ValueError("Graph and DataFrame must not be None.")
+
     attributes_key = dict(zip(df[key], df[attribute]))
     attributes_key_str = {str(k): v for k, v in attributes_key.items()}
 

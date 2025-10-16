@@ -52,3 +52,22 @@ def test_prepare_graph_fps():
     assert G_prepared.nodes["1"]["fps"] == "1111"
     assert G_prepared.nodes["2"]["fps"] == "1110"
     assert "fps" not in G_prepared.nodes["4"]  # Node '4' should not have the attribute
+
+
+def test_prepare_graph_empty_inputs():
+    G = nx.Graph()
+    df = pd.DataFrame()
+
+    try:
+        prepare_graph_class(None, df, key="feature_id", attribute="second_level_class")
+    except ValueError as e:
+        assert str(e) == "Graph and DataFrame must not be None."
+    else:
+        assert False, "Expected ValueError for None graph"
+
+    try:
+        prepare_graph_fps(G, None, key="feature_id", attribute="fps")
+    except ValueError as e:
+        assert str(e) == "Graph and DataFrame must not be None."
+    else:
+        assert False, "Expected ValueError for None DataFrame"
