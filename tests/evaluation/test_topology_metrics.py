@@ -67,14 +67,10 @@ def test_calculate_isolated_nodes_empty_graph():
 
 def test_network_component_size_metric():
     G = nx.Graph()
-    G.add_edges_from([(1, 2), (2, 3), (4, 5)])
-    G.add_node(6)  # Isolated node
-    threshold = 0.5
-    assert (
-        network_component_size_metric(G, threshold) == 3
-    )  # Largest components covering at least 50% of nodes
+    G.add_edges_from([(1, 2), (2, 3)])  # Component of size 3
+    G.add_edges_from([(4, 5)])  # Component of size 2
+    G.add_node(6)  # Isolated node, component of size 1
 
-    threshold = 0.8
-    assert (
-        network_component_size_metric(G, threshold) == 5
-    )  # Largest components covering at least 80% of nodes
+    assert network_component_size_metric(G, 0.5) == 3  # 50% of 6 nodes is 3
+    assert network_component_size_metric(G, 1 / 3) == 3  # ~33% of 6 nodes is 2
+    assert network_component_size_metric(G, 1 / 6) == 3  # ~16.67% of 6 nodes is 1

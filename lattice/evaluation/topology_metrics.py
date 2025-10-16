@@ -1,4 +1,5 @@
 import networkx as nx
+import math
 
 
 def calculate_average_degree(G: nx.Graph) -> float:
@@ -51,18 +52,17 @@ def network_component_size_metric(G: nx.Graph, threshold: float) -> float:
     Returns:
     float: The size of the largest components that make up the given percentage of the graph.
     """
-    if not G or G.number_of_nodes() == 0:
-        raise ValueError("Input Graph is empty.")
+    if G.number_of_nodes() == 0:
+        raise ValueError("Graph is empty")
 
-    total_nodes = G.number_of_nodes()
-    required_nodes = threshold * total_nodes
-    cluster_sizes = sorted([len(c) for c in nx.connected_components(G)], reverse=True)
+    total_of_nodes = G.number_of_nodes()
+    top_threshold = math.ceil(threshold * total_of_nodes)
+    cluster_sizes = [
+        len(c) for c in sorted(nx.connected_components(G), key=len, reverse=True)
+    ]
 
     cumulative_size = 0
     for size in cluster_sizes:
         cumulative_size += size
-        if cumulative_size >= required_nodes:
-            return float(cumulative_size)
-
-    # If somehow threshold > 1 or rounding issues
-    return float(total_nodes)
+        if cumulative_size >= top_threshold:
+            return size
