@@ -1,0 +1,17 @@
+# Matchms pipeline config file
+# This file is build for cleaning libraries before machine learning training.
+# The methods are optimized for the GNPS library in may 2023
+# Change and adapt fields where necessary
+# ====================
+filters:
+  - name: select_by_mz
+    params:
+      mz_from: 50
+      mz_to: 1000
+  - name: select_by_relative_intensity
+    params:
+      intensity_from: 0.03
+  - name: require_minimum_number_of_peaks
+    params:
+      n_required: 5
+  - name: normalize_intensities
