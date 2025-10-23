@@ -55,7 +55,7 @@ def calculate_edge_purity(graph: nx.Graph, attribute: str) -> float:
     Returns:
     float: from 0 till 1. The proportion of edges that connect nodes of the same chemical class.
     """
-    # checks if empty df
+    # checks if empty dff
     if not graph:
         raise ValueError("Input Graph is empty.")
 
@@ -131,6 +131,13 @@ def calculate_network_accuracy_score(G: nx.Graph) -> float:
     components = list(nx.connected_components(G))
     total_nodes = G.number_of_nodes()
     results = []
+
+    fps_found = (
+        sum("fingerprint" in data for n, data in G.nodes(data=True)),
+        "of",
+        G.number_of_nodes(),
+    )
+    print("Fingerprints found in nodes:", fps_found)
 
     for component in components:
         subgraph = G.subgraph(component)
