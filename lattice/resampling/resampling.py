@@ -4,33 +4,67 @@ import numpy as np
 from scipy.stats import qmc
 
 
-def boostrap_spectra_replacement(scores: Scores, seed: int) -> Scores:
-    """Create a bootstrap sample with replacement from a Scores object matchms.
+def subsample_spectra_no_replacement(
+    scores: Scores,
+    seed: int,
+    fraction: float = 0.85,
+    n_samples: int | None = None,
+) -> Scores:
+    """Create a subsample (WITHOUT replacement) from a matchms Scores object.
 
     Parameters
     ----------
     scores: matchms.Scores
-        Scores object to create the bootstrap sample from.
+        Scores object to subsample from.
     seed: int
         Random seed for reproducibility.
+    fraction: float
+        Fraction of spectra to keep (ignored if n_samples is set).
+    n_samples: int or None
+        Exact number of spectra to keep. If None, uses fraction * N.
+
+    Returns
+    -------
+    matchms.Scores
+        New Scores object containing only the selected spectra and the induced
+        sparse score matrix restricted to them.
     """
-    np.random.seed(seed)
-    indices = np.random.choice(
-        len(scores.references), len(scores.references), replace=True
-    )
+    rng = np.random.default_rng(seed)
+    n_total = len(scores.references)
+
+    if n_samples is None:
+        if not (0 < fraction <= 1.0):
+            raise ValueError(f"fraction must be in (0, 1], got {fraction}")
+        n_samples = int(np.ceil(fraction * n_total))
+
+    # guardrails: network needs at least 2 nodes to have edges
+    n_samples = max(2, min(n_samples, n_total))
+
+    # sample UNIQUE indices (no replacement)
+    indices = rng.choice(n_total, size=n_samples, replace=False)
+
+    # optional: keep original order (helps stability of identifiers / debugging)
+    indices = np.sort(indices)
+
     new_refs = scores.references[indices]
     new_queries = scores.queries[indices]
-    index_map = {old: new for new, old in enumerate(indices)}
 
-    # here it obtains the column and ro and data for the sparse score matrix
+    # map old -> new indices for remapping sparse matrix
+    index_map = {old_idx: new_pos for new_pos, old_idx in enumerate(indices)}
+
+    # restrict sparse matrix to the selected indices (induced submatrix)
     mask = np.isin(scores._scores.row, indices) & np.isin(scores._scores.col, indices)
 
     old_rows = scores._scores.row[mask]
     old_cols = scores._scores.col[mask]
     old_data = scores._scores.data[mask]
 
-    new_rows = np.array([index_map[r] for r in old_rows])
-    new_cols = np.array([index_map[c] for c in old_cols])
+    new_rows = np.fromiter(
+        (index_map[r] for r in old_rows), dtype=int, count=len(old_rows)
+    )
+    new_cols = np.fromiter(
+        (index_map[c] for c in old_cols), dtype=int, count=len(old_cols)
+    )
     new_data = old_data
 
     new_stack = StackedSparseArray(len(new_refs), len(new_queries))
