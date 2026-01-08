@@ -3,6 +3,7 @@
 
 # robustness_metrics.py
 import numpy as np
+import networkx as nx
 
 
 def edge_stability_original(original_network, bootstrapped_networks):
@@ -44,21 +45,21 @@ def node_isolation_probability(bootstrapped_networks, nodes_names):
       isolation_prob: {node: prob} (np.nan if never present)
       present_count : {node: #replicas present}
     """
+    nodes_set = set(nodes_names)
     present = {n: 0 for n in nodes_names}
     isolated = {n: 0 for n in nodes_names}
 
     for g in bootstrapped_networks:
-        node_set = set(g.nodes)
-        for n in nodes_names:
-            if n in node_set:
-                present[n] += 1
-                if g.degree(n) == 0:
-                    isolated[n] += 1
+        # only nodes that are present AND tracked
+        present_nodes = set(g.nodes) & nodes_set
+        for n in present_nodes:
+            present[n] += 1
+            if g.degree(n) == 0:
+                isolated[n] += 1
 
-    prob = {}
-    for n in nodes_names:
-        prob[n] = (isolated[n] / present[n]) if present[n] > 0 else np.nan
-
+    prob = {
+        n: (isolated[n] / present[n]) if present[n] > 0 else np.nan for n in nodes_names
+    }
     return prob, present
 
 
@@ -74,23 +75,19 @@ def neighbourhood_stability_vs_original(
 
     Returns: {node: mean_jaccard} (np.nan if node never appears)
     """
+    nodes_set = set(nodes_names)
     orig_neighbors = {
-        n: (set(original_network.neighbors(n)) if n in original_network else set())
+        n: set(original_network.neighbors(n)) if n in original_network else set()
         for n in nodes_names
     }
-
     vals = {n: [] for n in nodes_names}
 
     for g in bootstrapped_networks:
-        node_set = set(g.nodes)
-        for n in nodes_names:
-            if n not in node_set:
-                continue
-
+        present_nodes = set(g.nodes) & nodes_set
+        for n in present_nodes:
             rep_nei = set(g.neighbors(n))
             orig_nei = orig_neighbors[n]
             union = orig_nei | rep_nei
-
             vals[n].append(
                 1.0 if len(union) == 0 else len(orig_nei & rep_nei) / len(union)
             )
@@ -109,41 +106,40 @@ def giant_component_membership_probability(bootstrapped_networks, nodes_names):
       prob_in_gc  : {node: prob} (np.nan if never present)
       present_cnt : {node: #replicas present}
     """
+    nodes_set = set(nodes_names)
     present = {n: 0 for n in nodes_names}
     in_gc = {n: 0 for n in nodes_names}
 
     for g in bootstrapped_networks:
-        node_set = set(g.nodes)
-        for n in nodes_names:
-            if n in node_set:
-                present[n] += 1
+        present_nodes = set(g.nodes) & nodes_set
+        for n in present_nodes:
+            present[n] += 1
 
-        # compute GC nodes (inline, no extra helper function)
-        unvisited = set(node_set)
-        best = set()
-        while unvisited:
-            start = next(iter(unvisited))
-            stack = [start]
-            comp = {start}
-            unvisited.remove(start)
+        if g.number_of_nodes() == 0:
+            continue
+        lcc = max(nx.connected_components(g), key=len, default=set())
+        for n in lcc & nodes_set:
+            in_gc[n] += 1
 
-            while stack:
-                u = stack.pop()
-                for v in g.neighbors(u):
-                    if v in unvisited:
-                        unvisited.remove(v)
-                        comp.add(v)
-                        stack.append(v)
-
-            if len(comp) > len(best):
-                best = comp
-
-        for n in best:
-            if n in in_gc:  # only count nodes we track
-                in_gc[n] += 1
-
-    prob = {}
-    for n in nodes_names:
-        prob[n] = (in_gc[n] / present[n]) if present[n] > 0 else np.nan
-
+    prob = {
+        n: (in_gc[n] / present[n]) if present[n] > 0 else np.nan for n in nodes_names
+    }
     return prob, present
+
+
+def giant_component_fraction(bootstrapped_networks):
+    """
+    For each replicate graph g:
+      GCF = |largest connected component| / |V|
+    Returns:
+      gcf_list : list[float] length = #replicates (np.nan if graph empty)
+    """
+    gcf = []
+    for g in bootstrapped_networks:
+        n = g.number_of_nodes()
+        if n == 0:
+            gcf.append(np.nan)
+            continue
+        lcc = max((len(c) for c in nx.connected_components(g)), default=0)
+        gcf.append(lcc / n)
+    return gcf
