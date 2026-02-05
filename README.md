@@ -1,7 +1,7 @@
-# LATTICE
+# arteMIS
 
 > **Work in progress (pre-release) 🚧**  
-> LATTICE is a statistically gorunded framework for **robust, reproducible, and interpretable** molecular networking. It is desgined to help users to **tune parameters, score network quality, and compare runs** by measuring how well network topology agrees with chemistry based metrics. 
+> arteMIS is a statistically gorunded framework for **robust, reproducible, and interpretable** molecular networking. It is desgined to help users to **tune parameters, score network quality, and compare runs** by measuring how well network topology agrees with chemistry based metrics. 
 
 [![Status](https://img.shields.io/badge/status-WIP-orange.svg)](#) [![License](https://img.shields.io/badge/license-MIT-blue.svg)](#license) [![Python](https://img.shields.io/badge/python-3.10%2B-informational.svg)](#requirements)
 
@@ -14,7 +14,7 @@
 - **Topology ↔ Chemistry agreement:** Quantifies how network structure (edges/nodes/components) aligns with chemistry-derived groupings or distances (e.g., morgan fingerprints and tanimoto similarity).
 
 
-> LATTICE does run spectral networking itself. You can **evaluate** the optimized configurations in your own dataset using matchMS-based metrics.
+> arteMIS does run spectral networking itself. You can **evaluate** the optimized configurations in your own dataset using matchMS-based metrics.
 
 ---
 
@@ -24,7 +24,7 @@ Nose hehe
 ---
 
 ## 🧩 Metrics (current & planned) 
-Cambialo ROSI
+
 
 **Implemented (early stage):**
 - Component/family **purity** vs. chemical classes  
