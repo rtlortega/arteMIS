@@ -1,0 +1,9 @@
+name: specreboot
+channels:
+  - defaults
+dependencies:
+  - python=3.12
+  - matchms = 0.31.0
+  - ipykernel
+  - spec2vec
+  - ms2deepscore = 2.6

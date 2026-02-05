@@ -2,9 +2,7 @@ from rdkit import Chem
 from rdkit.Chem.rdFingerprintGenerator import GetMorganGenerator
 
 
-def smiles_to_morgan_fps(
-    smiles: str, radius: int = 2, nBits: int = 4096
-):
+def smiles_to_morgan_fps(smiles: str, radius: int = 2, nBits: int = 4096):
     """Convert a SMILES string to a Morgan fingerprint.
     Parameters:
         smiles (str): The SMILES string to convert.
