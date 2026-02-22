@@ -214,3 +214,163 @@ def calculate_consistency_measurement(G: nx.Graph, key: str, attribute: str) -> 
 
     ratio_correct_compo = purities / len(component_groups) if component_groups else 0
     return ratio_correct_compo
+    
+def calculate_edge_purity_target_incident(
+    G: nx.Graph,
+    attribute: str,
+    target_class: str,
+    require_both_labeled: bool = True,
+) -> float:
+    """
+    Edge purity conditioned on the class of interest.
+    Considers only edges where at least one endpoint is in target_class.
+
+    Returns:
+        fraction of considered edges that are target-target among all edges incident to target.
+        (i.e., 1 - leakage, if labels are complete)
+    """
+    if not G:
+        raise ValueError("Input Graph is empty.")
+
+    cls = nx.get_node_attributes(G, attribute)
+
+    tt = 0  # target-target
+    t_any = 0  # edges incident to target (target-target + target-other)
+
+    for u, v in G.edges():
+        u_c = cls.get(u)
+        v_c = cls.get(v)
+
+        if require_both_labeled and (u_c is None or v_c is None or pd.isna(u_c) or pd.isna(v_c)):
+            continue
+
+        u_is_t = (u_c == target_class)
+        v_is_t = (v_c == target_class)
+
+        if not (u_is_t or v_is_t):
+            continue  # not incident to target, skip
+
+        t_any += 1
+        if u_is_t and v_is_t:
+            tt += 1
+
+    return tt / t_any if t_any else 0.0
+
+
+def calculate_component_purity_target_components(
+    G: nx.Graph,
+    component_key: str,
+    class_attr: str,
+    target_class: str,
+    ignore_unlabeled: bool = True,
+    weight_by_target_nodes: bool = True,
+    min_component_size: int = 2,
+) -> float:
+    """
+    Component purity conditioned on a target class.
+    Only components that contain at least one target node are evaluated.
+
+    Purity is defined as (count of most common class label in component) / (component size).
+
+    If weight_by_target_nodes=True, components contribute proportional to how many target nodes they contain
+    (recommended; prevents tiny boundary components from dominating).
+    """
+    if not G:
+        raise ValueError("Input Graph is empty.")
+
+    # group nodes by component id
+    comp_to_nodes = {}
+    for n, d in G.nodes(data=True):
+        comp_id = d.get(component_key)
+        if comp_id is None:
+            continue
+        comp_to_nodes.setdefault(comp_id, []).append(n)
+
+    purities = []
+    weights = []
+
+    for comp_id, nodes in comp_to_nodes.items():
+        # --- skip tiny components ---
+        if len(nodes) < min_component_size:
+            continue
+
+        labels = []
+        n_target = 0
+        for n in nodes:
+            c = G.nodes[n].get(class_attr)
+            if c is None and ignore_unlabeled:
+                continue
+            labels.append(c)
+            if c == target_class:
+                n_target += 1
+
+        if n_target == 0:
+            continue  # not a target-containing component
+
+        if len(labels) == 0:
+            continue  # all unlabeled and we're ignoring unlabeled
+
+        counts = Counter(labels)
+        purity = counts.most_common(1)[0][1] / len(labels)
+
+        purities.append(purity)
+        weights.append(n_target if weight_by_target_nodes else 1)
+
+    if not purities:
+        return 0.0
+
+    if weight_by_target_nodes:
+        return sum(p * w for p, w in zip(purities, weights)) / sum(weights)
+    return statistics.mean(purities)
+
+
+def calculate_target_component_purity(
+    G: nx.Graph,
+    component_key: str,
+    class_attr: str,
+    target_class: str,
+    ignore_unlabeled: bool = True,
+    min_component_size: int = 2,
+) -> float:
+    """
+    For all nodes that lie in components containing >=1 target node:
+    returns (# target nodes) / (# total nodes in those components).
+
+    High = target nodes live in mostly-target components.
+    """
+    if not G:
+        raise ValueError("Input Graph is empty.")
+
+    # group nodes by component id
+    comp_to_nodes = {}
+    for n, d in G.nodes(data=True):
+        comp_id = d.get(component_key)
+        if comp_id is None:
+            continue
+        comp_to_nodes.setdefault(comp_id, []).append(n)
+
+    total_in_target_comps = 0
+    total_target = 0
+
+    for comp_id, nodes in comp_to_nodes.items():
+        if len(nodes) < min_component_size:
+            continue
+        
+        labels = []
+        for n in nodes:
+            c = G.nodes[n].get(class_attr)
+            if c is None and ignore_unlabeled:
+                continue
+            labels.append(c)
+
+        if not labels:
+            continue
+
+        has_target = any(c == target_class for c in labels)
+        if not has_target:
+            continue
+
+        total_in_target_comps += len(labels)
+        total_target += sum(c == target_class for c in labels)
+
+    return total_target / total_in_target_comps if total_in_target_comps else 0.0
