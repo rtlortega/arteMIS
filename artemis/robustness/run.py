@@ -3,7 +3,7 @@ import numpy as np
 from pathlib import Path
 import networkx as nx
 
-from lattice.networking.build import build_similarity_graph
+from artemis.networking.build import build_similarity_graph
 
 from .metrics import (
     edge_stability_original,
