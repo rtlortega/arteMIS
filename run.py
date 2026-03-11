@@ -7,7 +7,7 @@ import pandas as pd
 # Loading spectra
 from matchms.importing import load_from_mgf
 
-spectra_list = list(load_from_mgf("/home/torre044/nobackup_torre044/Datasets/ORIGINAL_SPECTRA.mgf"))
+spectra_list = list(load_from_mgf("/lustre/BIF/nobackup/charr003/projects/PostDoc/SpecReBoot_results/data/FMR13576_240424_MN.mgf"))
 print(f"Loaded {len(spectra_list)} spectra from MGF.")
 
 for idx, s in enumerate(spectra_list):
@@ -38,7 +38,7 @@ flash_modcosine_scores.to_json("OUT_SCORES.json")
 # Latin hyper cube
 from artemis.utils.lhs import get_latin_hypercube_samples
 
-n = 5 # 50 networks
+n = 50 # 50 networks
 # compute n networks
 settings = {"max_comp_size": [50,300], "max_links": [5,50], "cut_off": [0.6,0.80]}
 
@@ -69,11 +69,15 @@ from artemis.evaluation.chemistry_metrics import (
     calculate_component_purity,
     calculate_network_accuracy_score,
     calculate_consistency_measurement,
+    calculate_edge_purity_target_incident,
+    calculate_component_purity_target_components,
+    calculate_target_component_purity,
 )
 # -------------------------
 # Helper functions
 # -------------------------
 target_chem_level = "npc_pathway_results" #to change
+target_class = "Alkaloids"   # <-- change to your class of interest
 
 def topology_metrics(G):
     return {
@@ -91,6 +95,14 @@ def compute_chemistry_metrics(df, G, key="component", attribute=target_chem_leve
         "component_purity": calculate_component_purity(G, key=key, attribute=attribute),
         "network_accuracy_score": calculate_network_accuracy_score(G),
         "consistency_measurement": calculate_consistency_measurement(G, key=key, attribute=attribute),
+    }
+
+def compute_target_class_metrics(G, component_key="component", class_attr=target_chem_level, target_class=target_class):
+    return {
+        "target_class": target_class,
+        "edge_purity_target_incident": calculate_edge_purity_target_incident(G, attribute=class_attr, target_class=target_class, require_both_labeled=True),
+        "component_purity_target_components": calculate_component_purity_target_components(G, component_key=component_key, class_attr=class_attr, target_class=target_class, ignore_unlabeled=True, weight_by_target_nodes=True, min_component_size=2),
+        "target_component_purity": calculate_target_component_purity(G, component_key=component_key, class_attr=class_attr, target_class=target_class, ignore_unlabeled=True, min_component_size=2),
     }
 
 def compute_networks(scores, score_name, max_comp_size, max_links, cut_off, identifier_key="feature_id"):
@@ -118,7 +130,7 @@ def safe_smiles_to_fp(smi):
     
 score_name = flash_modcosine_scores.scores.data.dtype.names[0]
 
-df_chem_info = pd.read_csv("PATH_TO_MS2QUERY_RESULTS.csv")  # <-- put your MS2Query results file
+df_chem_info = pd.read_csv("/lustre/BIF/nobackup/charr003/projects/PostDoc/SpecReBoot_results/data/ms2query/harmonization_test.csv")  # <-- put your MS2Query results file
 df_chem_info["feature_id"] = pd.to_numeric(df_chem_info["feature_id"], errors="coerce")
 
 results = []
@@ -140,7 +152,6 @@ for idx, combinations in enumerate(param_sets):
     print("Network computed")
     print(
     "nodes:", net.number_of_nodes(),
-
     "edges:", net.number_of_edges(),
     "avg_degree:", calculate_average_degree(net)
     )
@@ -167,11 +178,13 @@ for idx, combinations in enumerate(param_sets):
     prepare_graph_fps(net, df_chem_info_net, feature_col="feature_id", attribute="fingerprint")
 
     chemistry_metrics = compute_chemistry_metrics(df_chem_info_net, net, key="component")
+    target_metrics = compute_target_class_metrics(net, component_key="component", class_attr=target_chem_level, target_class=target_class)
 
     results.append({
         "params": combinations,
         "topology_metrics": topology_net,
         "chemistry_metrics": chemistry_metrics,
+        "target_class_metrics": target_metrics,
     })
 
     print(f"Completed with parameters: {combinations}")
@@ -201,10 +214,16 @@ def make_df_for_score(score_name: str, entries) -> pd.DataFrame:
                 prefix = "top_"
             elif section == "chemistry_metrics":
                 prefix = "chem_"
+            elif section == "target_class_metrics":
+                prefix = "target_"
+            elif section == "params":
+                prefix = ""
             else:
                 prefix = ""  # no prefix for params
+
             for k, v in section_dict.items():
                 row[f"{prefix}{k}"] = v
+
         row["score_family"] = score_name
         rows.append(row)
     return pd.DataFrame(rows)
@@ -219,14 +238,18 @@ param_cols = ["max_comp_size", "max_links", "cut_off"]
 # OPTIONAL: set metric directions/weights.
 # If you leave these empty lists, the code will auto-detect metrics and apply a heuristic.
 # Prefer explicitly listing what you want to MAX or MIN.
+
 maximize_user = [
-    # Topology
     "top_network_component_size_metric",
-    "top_avg_degree"
-    # Chemistry
+    "top_avg_degree",
     "chem_net_avg_intra",
-    "chem_consistency_measurement", 
+    "chem_net_avg_inter",
+    "chem_edge_purity",
+    "chem_component_purity",
+    "chem_network_accuracy_score",
+    "chem_consistency_measurement",
 ]
+
 minimize_user = [
     "top_num_isolated_nodes",
     # if you truly want to MINIMIZE a penalized metric, list it here instead of maximize
@@ -243,7 +266,7 @@ weights = {}  # e.g., {"chem_network_accuracy_score": 2.0, "chem_consistency_mea
 all_cols = df.columns.tolist()
 
 # metrics start with 'top_' or 'chem_'
-metric_cols = [c for c in all_cols if c.startswith(("top_", "chem_"))]
+metric_cols = [c for c in all_cols if c.startswith(("top_", "chem_", "target_"))]
 
 # everything else (except score_family) are params
 param_cols = [c for c in all_cols if c not in metric_cols + ["score_family", "composite_score", "is_pareto"]]
@@ -269,7 +292,11 @@ def split_metrics(metric_cols, maximize_hint=None, minimize_hint=None):
             max_cols.append(c)
     return max_cols, min_cols
 
-maximize, minimize = split_metrics(metric_cols)
+maximize, minimize = split_metrics(
+    metric_cols,
+    maximize_hint=maximize_user,
+    minimize_hint=minimize_user,
+)
 print("Maximize:", maximize)
 print("Minimize:", minimize)
 
