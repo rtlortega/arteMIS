@@ -7,21 +7,38 @@ import pandas as pd
 # Loading spectra
 from matchms.importing import load_from_mgf
 
-spectra_list = list(load_from_mgf("/home/torre044/nobackup_torre044/Datasets/ARTEMIS_101.mgf"))
+spectra_list = list(load_from_mgf("/home/torre044/nobackup_torre044/Datasets/ORIGINAL_SPECTRA.mgf"))
 print(f"Loaded {len(spectra_list)} spectra from MGF.")
+
+for idx, s in enumerate(spectra_list):
+    if s.get('feature_id') == None:
+        s.set("feature_id", idx + 1)
+
+# Harmonizing, without filtering
+from matchms.filtering.SpectrumProcessor import SpectrumProcessor
+from matchms.filtering.default_pipelines import DEFAULT_FILTERS
+from matchms.exporting import save_as_mgf
+
+spectrum_processor = SpectrumProcessor(DEFAULT_FILTERS)
+
+final_filter_order = [filter.__name__ for filter in spectrum_processor.filters]
+
+cleaned_spectra, report = spectrum_processor.process_spectra(spectra_list, cleaned_spectra_file = "harmonization_NAME.mgf",create_report=True)
+
+print("Spectra left after harmonzation:", len(cleaned_spectra))
 
 # Computing scores
 from matchms.similarity.FlashSimilarity import FlashSimilarity
 from matchms import calculate_scores
 
 flash_modcosine_similarity = FlashSimilarity(score_type="cosine", matching_mode="hybrid", tolerance=0.01)
-flash_modcosine_scores = calculate_scores(spectra_list, spectra_list, similarity_function=flash_modcosine_similarity)
-flash_modcosine_scores.to_json("101_CaseStudy_OUT_SCORES.json")
+flash_modcosine_scores = calculate_scores(cleaned_spectra, cleaned_spectra, similarity_function=flash_modcosine_similarity)
+flash_modcosine_scores.to_json("OUT_SCORES.json")
 
 # Latin hyper cube
 from artemis.utils.lhs import get_latin_hypercube_samples
 
-n = 51 # 50 networks
+n = 5 # 50 networks
 # compute n networks
 settings = {"max_comp_size": [50,300], "max_links": [5,50], "cut_off": [0.6,0.80]}
 
@@ -30,7 +47,7 @@ param_sets, unit_samples = get_latin_hypercube_samples(settings, num_samples=n, 
 discrepancy = qmc.discrepancy(unit_samples)
 print("Discrepancy:", discrepancy)
 
-with open('101_CaseStudy_LHS_SETTINGS.json', 'w') as fout:
+with open('test_LHS_SETTINGS.json', 'w') as fout:
     json.dump(param_sets, fout)
 
 ############
@@ -101,7 +118,7 @@ def safe_smiles_to_fp(smi):
     
 score_name = flash_modcosine_scores.scores.data.dtype.names[0]
 
-df_chem_info = pd.read_csv("/home/torre044/nobackup_torre044/Datasets/results/ARTEMIS_101.csv")  # <-- put your MS2Query results file
+df_chem_info = pd.read_csv("PATH_TO_MS2QUERY_RESULTS.csv")  # <-- put your MS2Query results file
 df_chem_info["feature_id"] = pd.to_numeric(df_chem_info["feature_id"], errors="coerce")
 
 results = []
@@ -123,6 +140,7 @@ for idx, combinations in enumerate(param_sets):
     print("Network computed")
     print(
     "nodes:", net.number_of_nodes(),
+
     "edges:", net.number_of_edges(),
     "avg_degree:", calculate_average_degree(net)
     )
@@ -132,12 +150,11 @@ for idx, combinations in enumerate(param_sets):
     # Merge chem info
     df["feature_id"] = pd.to_numeric(df["feature_id"], errors="coerce")
     df_chem_info_net = df_chem_info.merge(df, on="feature_id", how="inner")
-
     # If merge empty, store and continue
     if df_chem_info_net.empty:
         results.append({
             "params": combinations,
-            "error": "merge empty (no matching feature_id between chem info and network df)"
+            "error": "merge empty (no matching feature_id between chem info and network df, most likely ms2query results and harmonized file have different dimentions)"
         })
         print(f"Completed (merge empty) with parameters: {idx, combinations}")
         continue
@@ -162,7 +179,7 @@ for idx, combinations in enumerate(param_sets):
 # -------------------------
 # Save output
 # -------------------------
-with open("101_CaseStudy_NETWORK_RESULTS_TEST.json", "w") as f:
+with open("NETWORK_RESULTS.json", "w") as f:
     json.dump(results, f, indent=4)
 
 
@@ -278,4 +295,4 @@ best_overall = (
           .head(10)
 )
 
-best_overall.to_csv("101_CaseStudy_TOP_CONFIGS.csv", index=False)
+best_overall.to_csv("TOP_CONFIGS.csv", index=False)
