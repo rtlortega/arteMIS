@@ -27,4 +27,4 @@ def build_similarity_graph(
     )
     net.create_network(scores, score_name=score_name)
     net.filter_components(max_component_size=max_comp_size)
-    return net.graph.copy()
+    return net
