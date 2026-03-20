@@ -7,10 +7,10 @@ def build_similarity_graph(
     identifier_key,
     cut_off,
     max_links,
+    top_n,
     max_comp_size,
     link_method="single",
     min_peaks=None,
-    top_n=50,
 ):
     """
     Build a filtered similarity graph from a matchms Scores object.
@@ -22,7 +22,7 @@ def build_similarity_graph(
         score_cutoff=cut_off,
         max_links=max_links,
         min_peaks=min_peaks,
-        top_n=50,
+        top_n=top_n,
         link_method=link_method,
     )
     net.create_network(scores, score_name=score_name)
