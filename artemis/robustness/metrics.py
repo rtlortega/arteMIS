@@ -89,10 +89,11 @@ def neighbourhood_stability_vs_original(
             orig_nei = orig_neighbors[n]
             union = orig_nei | rep_nei
             vals[n].append(
-                1.0 if len(union) == 0 else len(orig_nei & rep_nei) / len(union)
+                np.nan if len(union) == 0 else len(orig_nei & rep_nei) / len(union)
             )
-
-    return {n: (float(np.mean(vals[n])) if vals[n] else np.nan) for n in nodes_names}
+        return {
+            n: (float(np.nanmean(vals[n])) if vals[n] else np.nan) for n in nodes_names
+        }
 
 
 def giant_component_membership_probability(bootstrapped_networks, nodes_names):
