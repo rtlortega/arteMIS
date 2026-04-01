@@ -29,7 +29,13 @@ class SimilarityNetworkMod:
         self.keep_unconnected_nodes = keep_unconnected_nodes
         self.graph: Optional[nx.Graph] = None
 
-    def create_network(self, scores: Scores, score_name: str = None):
+    def create_network(
+        self,
+        scores: Scores,
+        score_name: str = None,
+        similars_idx=None,
+        similars_scores=None,
+    ):
         if score_name is None:
             score_name = scores.scores.guess_score_name()
         assert self.top_n >= self.max_links, "top_n must be >= max_links"
@@ -46,31 +52,33 @@ class SimilarityNetworkMod:
         msnet.add_nodes_from(unique_ids)
 
         # Collect location and score of highest scoring candidates
-        similars_idx, similars_scores = get_top_hits(
-            scores,
-            identifier_key=self.identifier_key,
-            top_n=self.top_n,
-            search_by="queries",
-            score_name=score_name,
-            ignore_diagonal=True,
-        )
-
+        if similars_idx is None:
+            similars_idx, similars_scores = get_top_hits(
+                scores,
+                identifier_key=self.identifier_key,
+                top_n=self.top_n,
+                search_by="queries",
+                score_name=score_name,
+                ignore_diagonal=True,
+            )
         # Build peaks_dict safely for any score type
         peaks_dict = {}
-        for ref, query, scores_tuple in scores:
-            if isinstance(scores_tuple, (float, np.float64)):
-                n_matches = 1
-            elif (
-                isinstance(scores_tuple, (list, np.ndarray)) and len(scores_tuple) == 1
-            ):
-                n_matches = 1
-            else:
-                n_matches = scores_tuple[1]
+        if self.min_peaks is not None:
+            for ref, query, scores_tuple in scores:
+                if isinstance(scores_tuple, (float, np.float64)):
+                    n_matches = 1
+                elif (
+                    isinstance(scores_tuple, (list, np.ndarray))
+                    and len(scores_tuple) == 1
+                ):
+                    n_matches = 1
+                else:
+                    n_matches = scores_tuple[1]
 
-            if ref.get(self.identifier_key) != query.get(self.identifier_key):
-                peaks_dict[
-                    (ref.get(self.identifier_key), query.get(self.identifier_key))
-                ] = n_matches
+                if ref.get(self.identifier_key) != query.get(self.identifier_key):
+                    peaks_dict[
+                        (ref.get(self.identifier_key), query.get(self.identifier_key))
+                    ] = n_matches
 
         # Add edges
         for i, spec in enumerate(scores.queries):
