@@ -1,12 +1,12 @@
 import networkx as nx
-from rdkit.DataStructs import TanimotoSimilarity
-from itertools import combinations
+from rdkit.DataStructs import TanimotoSimilarity, BulkTanimotoSimilarity
 import warnings
 
 import numpy as np
 import pandas as pd
 from collections import Counter
 import statistics
+from sklearn.metrics import adjusted_mutual_info_score
 
 
 def calculate_intra_inter_similarity(df: pd.DataFrame, key: str):
@@ -17,30 +17,30 @@ def calculate_intra_inter_similarity(df: pd.DataFrame, key: str):
     key (str): Column name used to define groups for intra- and inter-similarity calculations
     for example 'component'.
     """
-    # checks if empty df
     if df.empty:
         raise ValueError("Input DataFrame is empty.")
 
-    # keep only rows with valid fingerprints
-    df_valid = df[df["fingerprint"].notna()].copy()
+    df_valid = df[df["fingerprint"].notna()].reset_index(drop=True)
+    if df_valid.empty:
+        return np.nan, np.nan
+
+    fps = df_valid["fingerprint"].tolist()
+    components = df_valid[key].to_numpy()
+    n = len(fps)
 
     intra_sims = []
     inter_sims = []
 
-    for (i, row1), (j, row2) in combinations(df_valid.iterrows(), 2):
-        fp1, fp2 = row1["fingerprint"], row2["fingerprint"]
-        if fp1 is None or fp2 is None:
-            continue  # skip invalid pairs
+    for i in range(n - 1):
+        sims = np.array(BulkTanimotoSimilarity(fps[i], fps[i + 1 :]))
+        same_comp = components[i + 1 :] == components[i]
+        intra_sims.extend(sims[same_comp])
+        inter_sims.extend(sims[~same_comp])
 
-        sim = TanimotoSimilarity(fp1, fp2)
-        if row1[key] == row2[key]:
-            intra_sims.append(sim)
-        else:
-            inter_sims.append(sim)
-
-    avg_intra = np.mean(intra_sims) if intra_sims else np.nan
-    avg_inter = np.mean(inter_sims) if inter_sims else np.nan
-    return avg_intra, avg_inter
+    return (
+        float(np.mean(intra_sims)) if intra_sims else np.nan,
+        float(np.mean(inter_sims)) if inter_sims else np.nan,
+    )
 
 
 def calculate_edge_purity(graph: nx.Graph, attribute: str) -> float:
@@ -106,16 +106,17 @@ def calculate_component_purity(G, key: str, attribute: str) -> float:
         component_groups[comp_value]["nodes"].append(node)
         component_groups[comp_value]["chemical_classes"].append(chemical_class)
 
-    purities = []
+    total_nodes = sum(len(g["nodes"]) for g in component_groups.values())
+    weighted_purity = 0.0
 
     for comp_value, group in component_groups.items():
+        n = len(group["nodes"])
         count_classes = Counter(group["chemical_classes"])
-        most_common_classes = count_classes.most_common()
-        most_common_classes_list = list(most_common_classes)
-        most_common_class_mf = most_common_classes_list[0][1]
-        purity = most_common_class_mf / len(group["nodes"])
-        purities.append(purity)
-    return statistics.mean(purities)
+        most_common_class_mf = count_classes.most_common(1)[0][1]
+        purity = most_common_class_mf / n
+        weighted_purity += purity * n
+
+    return weighted_purity / total_nodes if total_nodes else 0.0
 
 
 def calculate_network_accuracy_score(G: nx.Graph) -> float:
@@ -202,19 +203,55 @@ def calculate_consistency_measurement(G: nx.Graph, key: str, attribute: str) -> 
         component_groups[comp_value]["nodes"].append(node)
         component_groups[comp_value][attribute].append(chemical_class)
 
-    purities = 0
-    for comp_value, group in component_groups.items():
-        count_classes = Counter(group[attribute])
-        most_common_classes = count_classes.most_common()
-        most_common_classes_list = list(most_common_classes)
-        most_common_class_mf = most_common_classes_list[0][1]
-        purity = most_common_class_mf / len(group["nodes"])
-        if purity >= 0.7:
-            purities += 1
+    consistent_nodes = 0
+    total_nodes = 0
 
-    ratio_correct_compo = purities / len(component_groups) if component_groups else 0
-    return ratio_correct_compo
-    
+    for comp_value, group in component_groups.items():
+        n = len(group["nodes"])
+        total_nodes += n
+        count_classes = Counter(group[attribute])
+        most_common_class_mf = count_classes.most_common(1)[0][1]
+        purity = most_common_class_mf / n
+        if purity >= 0.7:
+            consistent_nodes += n
+
+    return consistent_nodes / total_nodes if total_nodes else 0.0
+
+
+def calculate_ami_score(G: nx.Graph, key: str, attribute: str) -> float:
+    """
+    Measure alignment between component assignments and chemical class labels
+    using Adjusted Mutual Information (AMI).
+
+    AMI is threshold-free and corrects for chance, so singletons and random
+    groupings do not inflate the score. Returns ~0 for random alignment,
+    1 for perfect correspondence, and slightly negative for worse-than-random.
+
+    Parameters:
+    G (networkx.Graph): The graph to analyze.
+    key (str): Node attribute representing the component/group assignment.
+    attribute (str): Node attribute representing the chemical class.
+
+    Returns:
+    float: AMI score.
+    """
+    component_labels = []
+    class_labels = []
+
+    for _, attr in G.nodes(data=True):
+        comp = attr.get(key)
+        cls = attr.get(attribute)
+        if comp is None or cls is None:
+            continue
+        component_labels.append(comp)
+        class_labels.append(cls)
+
+    if not component_labels:
+        return 0.0
+
+    return adjusted_mutual_info_score(class_labels, component_labels)
+
+
 def calculate_edge_purity_target_incident(
     G: nx.Graph,
     attribute: str,
@@ -241,11 +278,13 @@ def calculate_edge_purity_target_incident(
         u_c = cls.get(u)
         v_c = cls.get(v)
 
-        if require_both_labeled and (u_c is None or v_c is None or pd.isna(u_c) or pd.isna(v_c)):
+        if require_both_labeled and (
+            u_c is None or v_c is None or pd.isna(u_c) or pd.isna(v_c)
+        ):
             continue
 
-        u_is_t = (u_c == target_class)
-        v_is_t = (v_c == target_class)
+        u_is_t = u_c == target_class
+        v_is_t = v_c == target_class
 
         if not (u_is_t or v_is_t):
             continue  # not incident to target, skip
@@ -355,7 +394,7 @@ def calculate_target_component_purity(
     for comp_id, nodes in comp_to_nodes.items():
         if len(nodes) < min_component_size:
             continue
-        
+
         labels = []
         for n in nodes:
             c = G.nodes[n].get(class_attr)
