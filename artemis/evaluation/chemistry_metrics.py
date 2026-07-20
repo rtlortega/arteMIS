@@ -218,7 +218,13 @@ def calculate_consistency_measurement(G: nx.Graph, key: str, attribute: str) -> 
     return consistent_nodes / total_nodes if total_nodes else 0.0
 
 
-def calculate_ami_score(G: nx.Graph, key: str, attribute: str) -> float:
+def calculate_ami_score(
+    G: nx.Graph,
+    key: str,
+    attribute: str,
+    no_label_value: str = "No label",
+    min_component_size: int = 2,
+) -> float:
     """
     Measure alignment between component assignments and chemical class labels
     using Adjusted Mutual Information (AMI).
@@ -227,14 +233,32 @@ def calculate_ami_score(G: nx.Graph, key: str, attribute: str) -> float:
     groupings do not inflate the score. Returns ~0 for random alignment,
     1 for perfect correspondence, and slightly negative for worse-than-random.
 
+    Two exclusion filters are applied before computing AMI:
+    - Nodes with unknown chemical annotation (cls is None or matches
+      `no_label_value`) are excluded — they carry no ground-truth information.
+    - Nodes in singleton components (component size < `min_component_size`) are
+      excluded — isolated nodes cannot be "wrong" at clustering, and their many
+      unique component IDs inflate label cardinality, diluting AMI toward 0 and
+      triggering spurious sklearn warnings.
+
     Parameters:
     G (networkx.Graph): The graph to analyze.
     key (str): Node attribute representing the component/group assignment.
     attribute (str): Node attribute representing the chemical class.
+    no_label_value (str): String value treated as "unknown" and excluded.
+        Comparison is case-insensitive. Default: "No label".
+    min_component_size (int): Minimum component size to include. Default: 2
+        (excludes singletons).
 
     Returns:
-    float: AMI score.
+    float: AMI score over non-singleton, labeled nodes.
+        Returns 0.0 if fewer than 2 qualifying nodes remain.
     """
+    # First pass: count how many nodes belong to each component
+    comp_size: Counter = Counter(
+        attr.get(key) for _, attr in G.nodes(data=True) if attr.get(key) is not None
+    )
+
     component_labels = []
     class_labels = []
 
@@ -243,10 +267,18 @@ def calculate_ami_score(G: nx.Graph, key: str, attribute: str) -> float:
         cls = attr.get(attribute)
         if comp is None or cls is None:
             continue
+        if (
+            no_label_value is not None
+            and isinstance(cls, str)
+            and cls.strip().lower() == no_label_value.strip().lower()
+        ):
+            continue
+        if comp_size[comp] < min_component_size:
+            continue
         component_labels.append(comp)
         class_labels.append(cls)
 
-    if not component_labels:
+    if len(component_labels) < 2:
         return 0.0
 
     return adjusted_mutual_info_score(class_labels, component_labels)

@@ -120,6 +120,40 @@ class SimilarityNetworkMod:
 
         self.graph = msnet
 
+    def add_node_metadata(self, spectra, attributes=("precursor_mz",)):
+        """Add spectrum metadata fields as node attributes.
+
+        Call this after create_network (and filter_components) but before
+        exporting, so the attributes appear as columns in Cytoscape.
+
+        Parameters
+        ----------
+        spectra
+            Iterable of matchms Spectrum objects (must carry 'feature_id').
+        attributes
+            Tuple of metadata keys to copy onto each node.
+            Defaults to ('precursor_mz',). Pass any extra keys as needed,
+            e.g. ('precursor_mz', 'retention_time').
+        """
+        if self.graph is None:
+            raise ValueError("Graph not yet created. Run create_network first.")
+        for spec in spectra:
+            node_id = spec.get(self.identifier_key)
+            if node_id is None:
+                continue
+            # graph nodes may be int even if metadata stores the id as str
+            if not self.graph.has_node(node_id):
+                try:
+                    node_id = int(node_id)
+                except (ValueError, TypeError):
+                    pass
+            if not self.graph.has_node(node_id):
+                continue
+            for attr in attributes:
+                val = spec.get(attr)
+                if val is not None:
+                    self.graph.nodes[node_id][attr] = val
+
     def filter_components(
         self, max_component_size: int = 0, cosine_delta: float = 0.02
     ):
