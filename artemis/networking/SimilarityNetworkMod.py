@@ -35,71 +35,61 @@ class SimilarityNetworkMod:
         score_name: str = None,
         similars_idx=None,
         similars_scores=None,
+        identifiers=None,
     ):
         if score_name is None:
-            score_name = scores.scores.guess_score_name()
+            if hasattr(scores, "score_fields"):
+                score_name = scores.score_fields[0] if scores.score_fields else None
+            else:
+                score_name = scores.scores.data.dtype.names[0]
         assert self.top_n >= self.max_links, "top_n must be >= max_links"
-
-        if scores.queries.shape != scores.references.shape:
+        if scores.shape[0] != scores.shape[1]:
             raise TypeError("Expected symmetric scores")
-        if not np.all(scores.queries == scores.references):
-            raise ValueError("Queries and references do not match")
 
-        unique_ids = list({s.get(self.identifier_key) for s in scores.queries})
+        if identifiers is None:
+            identifiers = list(range(scores.shape[0]))
 
-        # Initialize network graph
         msnet = nx.Graph()
-        msnet.add_nodes_from(unique_ids)
+        msnet.add_nodes_from(identifiers)
 
-        # Collect location and score of highest scoring candidates
         if similars_idx is None:
             similars_idx, similars_scores = get_top_hits(
                 scores,
-                identifier_key=self.identifier_key,
                 top_n=self.top_n,
-                search_by="queries",
+                axis=1,
                 score_name=score_name,
+                identifiers=identifiers,
                 ignore_diagonal=True,
             )
-        # Build peaks_dict safely for any score type
-        peaks_dict = {}
-        if self.min_peaks is not None:
-            for ref, query, scores_tuple in scores:
-                if isinstance(scores_tuple, (float, np.float64)):
-                    n_matches = 1
-                elif (
-                    isinstance(scores_tuple, (list, np.ndarray))
-                    and len(scores_tuple) == 1
-                ):
-                    n_matches = 1
-                else:
-                    n_matches = scores_tuple[1]
 
-                if ref.get(self.identifier_key) != query.get(self.identifier_key):
-                    peaks_dict[
-                        (ref.get(self.identifier_key), query.get(self.identifier_key))
-                    ] = n_matches
+        # Pre-extract matches matrix once for vectorized min_peaks filtering
+        matches_matrix = None
+        query_id_to_idx = {}
+        score_fields = (
+            scores.score_fields
+            if hasattr(scores, "score_fields")
+            else (scores.scores.data.dtype.names or ())
+        )
+        if self.min_peaks is not None and "matches" in score_fields:
+            matches_matrix = (
+                scores.to_array("matches")
+                if hasattr(scores, "to_array")
+                else scores.scores.data["matches"]
+            )
+            query_id_to_idx = {id_: i for i, id_ in enumerate(identifiers)}
 
         # Add edges
-        for i, spec in enumerate(scores.queries):
-            query_id = spec.get(self.identifier_key)
-            ref_candidates = np.array(
-                [
-                    scores.references[x].get(self.identifier_key)
-                    for x in similars_idx[query_id]
-                ]
-            )
+        for i, query_id in enumerate(identifiers):
+            ref_candidates = np.array([identifiers[x] for x in similars_idx[query_id]])
 
             score_mask = similars_scores[query_id] >= self.score_cutoff
-            peaks_mask = np.array(
-                [
-                    True
-                    if self.min_peaks is None
-                    else peaks_dict.get((ref_id, query_id), 0) >= self.min_peaks
-                    for ref_id in ref_candidates
-                ],
-                dtype=bool,
-            )
+            if matches_matrix is not None:
+                r_indices = np.array(similars_idx[query_id])
+                q_idx = query_id_to_idx[query_id]
+                peaks_mask = matches_matrix[q_idx, r_indices] >= self.min_peaks
+            else:
+                peaks_mask = np.ones(len(ref_candidates), dtype=bool)
+
             self_link_mask = ref_candidates != query_id
             combined_mask = score_mask & peaks_mask & self_link_mask
             idx_all = np.where(combined_mask)[0]
@@ -107,20 +97,12 @@ class SimilarityNetworkMod:
 
             if self.link_method == "single":
                 new_edges = [
-                    (
-                        query_id,
-                        str(ref_candidates[x]),
-                        float(similars_scores[query_id][x]),
-                    )
+                    (query_id, ref_candidates[x], float(similars_scores[query_id][x]))
                     for x in idx
                 ]
             elif self.link_method == "mutual":
                 new_edges = [
-                    (
-                        query_id,
-                        str(ref_candidates[x]),
-                        float(similars_scores[query_id][x]),
-                    )
+                    (query_id, ref_candidates[x], float(similars_scores[query_id][x]))
                     for x in idx
                     if i in similars_idx[ref_candidates[x]][:]
                 ]
@@ -132,12 +114,45 @@ class SimilarityNetworkMod:
         if not self.keep_unconnected_nodes:
             msnet.remove_nodes_from(list(nx.isolates(msnet)))
 
-        # Assign component IDs
         for i, comp in enumerate(nx.connected_components(msnet)):
             for node in comp:
                 msnet.nodes[node]["component"] = i
 
         self.graph = msnet
+
+    def add_node_metadata(self, spectra, attributes=("precursor_mz",)):
+        """Add spectrum metadata fields as node attributes.
+
+        Call this after create_network (and filter_components) but before
+        exporting, so the attributes appear as columns in Cytoscape.
+
+        Parameters
+        ----------
+        spectra
+            Iterable of matchms Spectrum objects (must carry 'feature_id').
+        attributes
+            Tuple of metadata keys to copy onto each node.
+            Defaults to ('precursor_mz',). Pass any extra keys as needed,
+            e.g. ('precursor_mz', 'retention_time').
+        """
+        if self.graph is None:
+            raise ValueError("Graph not yet created. Run create_network first.")
+        for spec in spectra:
+            node_id = spec.get(self.identifier_key)
+            if node_id is None:
+                continue
+            # graph nodes may be int even if metadata stores the id as str
+            if not self.graph.has_node(node_id):
+                try:
+                    node_id = int(node_id)
+                except (ValueError, TypeError):
+                    pass
+            if not self.graph.has_node(node_id):
+                continue
+            for attr in attributes:
+                val = spec.get(attr)
+                if val is not None:
+                    self.graph.nodes[node_id][attr] = val
 
     def filter_components(
         self, max_component_size: int = 0, cosine_delta: float = 0.02

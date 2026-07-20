@@ -91,9 +91,7 @@ def neighbourhood_stability_vs_original(
             vals[n].append(
                 np.nan if len(union) == 0 else len(orig_nei & rep_nei) / len(union)
             )
-        return {
-            n: (float(np.nanmean(vals[n])) if vals[n] else np.nan) for n in nodes_names
-        }
+    return {n: (float(np.nanmean(vals[n])) if vals[n] else np.nan) for n in nodes_names}
 
 
 def giant_component_membership_probability(bootstrapped_networks, nodes_names):
@@ -144,3 +142,106 @@ def giant_component_fraction(bootstrapped_networks):
         lcc = max((len(c) for c in nx.connected_components(g)), default=0)
         gcf.append(lcc / n)
     return gcf
+
+
+class IncrementalRobustnessStats:
+    """Accumulate robustness statistics one bootstrap graph at a time.
+
+    Equivalent to the standalone functions above but without holding all
+    replicate graphs in memory simultaneously.
+    """
+
+    def __init__(self, original_graph: nx.Graph, all_identifiers: list):
+        self._nodes = list(all_identifiers)
+        self._nodes_set = set(all_identifiers)
+
+        self._orig_edges = set(tuple(sorted(e)) for e in original_graph.edges)
+        self._edge_num = {e: 0 for e in self._orig_edges}
+        self._edge_den = {e: 0 for e in self._orig_edges}
+
+        self._node_present = {n: 0 for n in self._nodes}
+        self._node_isolated = {n: 0 for n in self._nodes}
+        self._node_in_gc = {n: 0 for n in self._nodes}
+        self._neigh_sums = {n: 0.0 for n in self._nodes}
+        self._neigh_counts = {n: 0 for n in self._nodes}
+
+        self._orig_neighbors = {
+            n: set(original_graph.neighbors(n)) if n in original_graph else set()
+            for n in self._nodes
+        }
+
+        self.n_boot = 0
+        self.boot_n_nodes: list = []
+        self.boot_n_edges: list = []
+        self._gcf: list = []
+
+    def update(self, boot_g: nx.Graph):
+        self.n_boot += 1
+        self.boot_n_nodes.append(boot_g.number_of_nodes())
+        self.boot_n_edges.append(boot_g.number_of_edges())
+
+        boot_nodes = set(boot_g.nodes) & self._nodes_set
+        boot_edges = set(tuple(sorted(e)) for e in boot_g.edges)
+
+        for u, v in self._orig_edges:
+            if (u in boot_nodes) and (v in boot_nodes):
+                self._edge_den[(u, v)] += 1
+                if (u, v) in boot_edges:
+                    self._edge_num[(u, v)] += 1
+
+        if boot_g.number_of_nodes() > 0:
+            lcc = max(nx.connected_components(boot_g), key=len, default=set())
+            self._gcf.append(len(lcc) / boot_g.number_of_nodes())
+        else:
+            lcc = set()
+            self._gcf.append(np.nan)
+
+        for n in boot_nodes:
+            self._node_present[n] += 1
+            if boot_g.degree(n) == 0:
+                self._node_isolated[n] += 1
+            if n in lcc:
+                self._node_in_gc[n] += 1
+            rep_nei = set(boot_g.neighbors(n))
+            orig_nei = self._orig_neighbors[n]
+            union = orig_nei | rep_nei
+            j = 1.0 if len(union) == 0 else len(orig_nei & rep_nei) / len(union)
+            self._neigh_sums[n] += j
+            self._neigh_counts[n] += 1
+
+    def edge_stability(self) -> dict:
+        return {
+            e: (self._edge_num[e] / self._edge_den[e])
+            if self._edge_den[e] > 0
+            else np.nan
+            for e in self._orig_edges
+        }
+
+    def node_isolation(self) -> tuple:
+        prob = {
+            n: (self._node_isolated[n] / self._node_present[n])
+            if self._node_present[n] > 0
+            else np.nan
+            for n in self._nodes
+        }
+        return prob, dict(self._node_present)
+
+    def neighbourhood_stability(self) -> dict:
+        return {
+            n: (self._neigh_sums[n] / self._neigh_counts[n])
+            if self._neigh_counts[n] > 0
+            else np.nan
+            for n in self._nodes
+        }
+
+    def gc_membership(self) -> tuple:
+        prob = {
+            n: (self._node_in_gc[n] / self._node_present[n])
+            if self._node_present[n] > 0
+            else np.nan
+            for n in self._nodes
+        }
+        return prob, dict(self._node_present)
+
+    def gc_fraction(self) -> list:
+        return self._gcf

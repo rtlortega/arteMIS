@@ -2,3 +2,4 @@
 [flake8]
 # set accepted line length to 120 characters to match black
 max-line-length = 120
+extend-ignore = E203
