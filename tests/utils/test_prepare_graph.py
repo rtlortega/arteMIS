@@ -1,8 +1,8 @@
 import networkx as nx
 import pandas as pd
 
-from lattice.utils.prepare_graph import prepare_graph_class
-from lattice.utils.prepare_graph import prepare_graph_fps
+from artemis.utils.prepare_graph import prepare_graph_class
+from artemis.utils.prepare_graph import prepare_graph_fps
 
 
 def test_prepare_graph_class():
