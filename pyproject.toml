@@ -1,18 +1,24 @@
 [project]
 # basic information
-name = "your_project_name"
-description = "A description of your awesome Python project"
+name = "arteMIS"
+description = "arteMIS (Accelerated Ranking and Tuning using multi-metric Interpretability across Scores), is a framework that builds optimal networks networks for downstream analysis."
 authors = [
-  {name = "Your Name", email = "example@email.xyz"},
+  {name = "Laura Rosina Torres Ortega", email = "rosina.torresortega@wur.nl"},
+  {name = "Esteban Charria Giron", email = "esteban.charriagiron@wur.nl"},
 ]
 
 # This is the version of your project. You can increase the counter to indicate changes
 version = "0.1.0"
 
 # it is nice to pin down the version used to develop the project
-requires-python = ">=3.9"
+requires-python = ">=3.13"
 
 readme = "README.md"
+
+dependencies = ["pyyaml", "matchms>=0.32.0"]
+
+[project.scripts]
+artemis-run = "artemis.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["artemis*"]
