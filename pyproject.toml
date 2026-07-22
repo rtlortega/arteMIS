@@ -15,7 +15,7 @@ requires-python = ">=3.13"
 
 readme = "README.md"
 
-dependencies = ["pyyaml", "matchms>=0.32.0"]
+dependencies = ["pyyaml", "matchms @ git+https://github.com/matchms/matchms.git@development"]
 
 [project.scripts]
 artemis-run = "artemis.cli:main"
