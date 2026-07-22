@@ -29,7 +29,7 @@ preprocessing:
                         # require >=5 high-intensity peaks, denoise, drop profiled spectra).
 
 # Column in chem_file used for chemistry metrics / class labels.
-chem_level: "pathway_level"
+chem_level: "npc_pathway_results" #usual column from MS2Query results
 
 # Only read when mode: target.
 target:
