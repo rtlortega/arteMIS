@@ -2,16 +2,23 @@
 <!-- Created with Inkscape (http://www.inkscape.org/) -->
 
 <svg
-   width="210mm"
-   height="94.844963mm"
-   viewBox="0 0 210 94.844963"
+   width="210.25mm"
+   height="95.094963mm"
+   viewBox="0 0 210.25 95.094963"
    version="1.1"
    id="svg1"
    xml:space="preserve"
    xmlns="http://www.w3.org/2000/svg"
    xmlns:svg="http://www.w3.org/2000/svg"><defs
-     id="defs1" /><g
-     id="layer1"><g
+     id="defs1" /><rect
+     style="opacity:1;fill:#ffffff;fill-opacity:1;stroke:#ffffff;stroke-width:0.25;stroke-opacity:1"
+     id="rect1"
+     width="210"
+     height="94.844963"
+     x="0.125"
+     y="0.12500001" /><g
+     id="layer1"
+     transform="translate(0.125,0.12500001)"><g
        id="layer1-8"
        transform="matrix(8.8820482,0,0,8.8820482,-969.93193,-263.4139)"><text
          xml:space="preserve"
