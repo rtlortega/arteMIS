@@ -1,6 +1,5 @@
 import networkx as nx
-from rdkit.DataStructs import TanimotoSimilarity, BulkTanimotoSimilarity
-import warnings
+from rdkit import DataStructs
 
 import numpy as np
 import pandas as pd
@@ -31,7 +30,7 @@ def calculate_intra_inter_similarity(df: pd.DataFrame, key: str):
     inter_sims = []
 
     for i in range(n - 1):
-        sims = np.array(BulkTanimotoSimilarity(fps[i], fps[i + 1 :]))
+        sims = np.array(DataStructs.BulkTanimotoSimilarity(fps[i], fps[i + 1 :]))
         same_comp = components[i + 1 :] == components[i]
         intra_sims.extend(sims[same_comp])
         inter_sims.extend(sims[~same_comp])
@@ -42,140 +41,140 @@ def calculate_intra_inter_similarity(df: pd.DataFrame, key: str):
     )
 
 
-def calculate_edge_purity(graph: nx.Graph, attribute: str) -> float:
-    """
-    Calculate the edge purity based on chemical class attributes of nodes.
+# def calculate_edge_purity(graph: nx.Graph, attribute: str) -> float:
+#     """
+#     Calculate the edge purity based on chemical class attributes of nodes.
 
-    Parameters:
-    graph (networkx.Graph): The graph to analyze.
-    attribute (str): The node attribute to use for purity calculation
-    for example 'library_npclassifier_pathway'.
+#     Parameters:
+#     graph (networkx.Graph): The graph to analyze.
+#     attribute (str): The node attribute to use for purity calculation
+#     for example 'library_npclassifier_pathway'.
 
-    Returns:
-    float: from 0 till 1. The proportion of edges that connect nodes of the same chemical class.
-    """
-    # checks if empty dff
-    if not graph:
-        raise ValueError("Input Graph is empty.")
+#     Returns:
+#     float: from 0 till 1. The proportion of edges that connect nodes of the same chemical class.
+#     """
+#     # checks if empty dff
+#     if not graph:
+#         raise ValueError("Input Graph is empty.")
 
-    chemical_class = nx.get_node_attributes(graph, attribute)
+#     chemical_class = nx.get_node_attributes(graph, attribute)
 
-    chemical_class_shared_count = 0
-    chemical_class_not_shared_count = 0
+#     chemical_class_shared_count = 0
+#     chemical_class_not_shared_count = 0
 
-    for u, v, a in graph.edges(data=True):
-        # skip edges if one of the nodes has no chemical_class
-        if u not in chemical_class or v not in chemical_class:
-            continue
+#     for u, v, a in graph.edges(data=True):
+#         # skip edges if one of the nodes has no chemical_class
+#         if u not in chemical_class or v not in chemical_class:
+#             continue
 
-        if chemical_class[u] == chemical_class[v]:
-            chemical_class_shared_count += 1
-        else:
-            chemical_class_not_shared_count += 1
+#         if chemical_class[u] == chemical_class[v]:
+#             chemical_class_shared_count += 1
+#         else:
+#             chemical_class_not_shared_count += 1
 
-    total = chemical_class_shared_count + chemical_class_not_shared_count
-    return chemical_class_shared_count / total if total > 0 else 0.0
-
-
-def calculate_component_purity(G, key: str, attribute: str) -> float:
-    """
-    Calculate the component purity based on chemical class attributes of nodes.
-
-    Parameters:
-    graph (networkx.Graph): The graph to analyze.
-    key (str): Node attribute representing the component/group.
-    attribute (str): Node attribute representing the chemical class.
-
-    Returns:
-    list of purity values for each component.
-    """
-    # checks if empty
-    if not G:
-        raise ValueError("Input Graph is empty.")
-
-    component_groups = {}
-
-    for node, attr in G.nodes(data=True):
-        comp_value = attr.get(key)
-        chemical_class = attr.get(attribute)
-
-        if comp_value not in component_groups:
-            component_groups[comp_value] = {"nodes": [], "chemical_classes": []}
-
-        component_groups[comp_value]["nodes"].append(node)
-        component_groups[comp_value]["chemical_classes"].append(chemical_class)
-
-    total_nodes = sum(len(g["nodes"]) for g in component_groups.values())
-    weighted_purity = 0.0
-
-    for comp_value, group in component_groups.items():
-        n = len(group["nodes"])
-        count_classes = Counter(group["chemical_classes"])
-        most_common_class_mf = count_classes.most_common(1)[0][1]
-        purity = most_common_class_mf / n
-        weighted_purity += purity * n
-
-    return weighted_purity / total_nodes if total_nodes else 0.0
+#     total = chemical_class_shared_count + chemical_class_not_shared_count
+#     return chemical_class_shared_count / total if total > 0 else 0.0
 
 
-def calculate_network_accuracy_score(G: nx.Graph) -> float:
-    """Calculate the network accuracy score based on Tanimoto similarities of fingerprints within components.
-    Parameters:
-    G (networkx.Graph): The graph to analyze. Nodes should have 'fingerprint' attribute.
-    Returns:
-    float: The network accuracy score, weighted by component sizes.
-    """
-    if G.number_of_nodes() == 0:
-        raise ValueError("Input graph is empty.")
+# def calculate_component_purity(G, key: str, attribute: str) -> float:
+#     """
+#     Calculate the component purity based on chemical class attributes of nodes.
 
-    components = list(nx.connected_components(G))
-    total_nodes = G.number_of_nodes()
-    results = []
+#     Parameters:
+#     graph (networkx.Graph): The graph to analyze.
+#     key (str): Node attribute representing the component/group.
+#     attribute (str): Node attribute representing the chemical class.
 
-    fps_found = (
-        sum("fingerprint" in data for n, data in G.nodes(data=True)),
-        "of",
-        G.number_of_nodes(),
-    )
-    print("Fingerprints found in nodes:", fps_found)
+#     Returns:
+#     list of purity values for each component.
+#     """
+#     # checks if empty
+#     if not G:
+#         raise ValueError("Input Graph is empty.")
 
-    for component in components:
-        subgraph = G.subgraph(component)
-        size_comp = len(component)
-        edge_count_comp = subgraph.number_of_edges()
+#     component_groups = {}
 
-        # Isolated node (or component with no edges)
-        if edge_count_comp == 0:
-            score_comp = 1
+#     for node, attr in G.nodes(data=True):
+#         comp_value = attr.get(key)
+#         chemical_class = attr.get(attribute)
 
-        else:
-            similarity_scores = []
-            for u, v in subgraph.edges():
-                fps_u = subgraph.nodes[u].get("fingerprint")
-                fps_v = subgraph.nodes[v].get("fingerprint")
+#         if comp_value not in component_groups:
+#             component_groups[comp_value] = {"nodes": [], "chemical_classes": []}
 
-                if fps_u is None or fps_v is None:
-                    warnings.warn(
-                        f"Missing fingerprint for edge ({u}, {v}); skipping this edge."
-                    )
-                    continue
+#         component_groups[comp_value]["nodes"].append(node)
+#         component_groups[comp_value]["chemical_classes"].append(chemical_class)
 
-                sim_score = TanimotoSimilarity(fps_u, fps_v)
-                similarity_scores.append(sim_score)
+#     total_nodes = sum(len(g["nodes"]) for g in component_groups.values())
+#     weighted_purity = 0.0
 
-            score_comp = (
-                sum(similarity_scores) / len(similarity_scores)
-                if similarity_scores
-                else 1
-            )
+#     for comp_value, group in component_groups.items():
+#         n = len(group["nodes"])
+#         count_classes = Counter(group["chemical_classes"])
+#         most_common_class_mf = count_classes.most_common(1)[0][1]
+#         purity = most_common_class_mf / n
+#         weighted_purity += purity * n
 
-        results.append((score_comp, size_comp))
+#     return weighted_purity / total_nodes if total_nodes else 0.0
 
-    # Weighted average across components
-    total_score = (
-        sum(score * size for score, size in results if not pd.isna(score)) / total_nodes
-    )
-    return total_score
+
+# def calculate_network_accuracy_score(G: nx.Graph) -> float:
+#     """Calculate the network accuracy score based on Tanimoto similarities of fingerprints within components.
+#     Parameters:
+#     G (networkx.Graph): The graph to analyze. Nodes should have 'fingerprint' attribute.
+#     Returns:
+#     float: The network accuracy score, weighted by component sizes.
+#     """
+#     if G.number_of_nodes() == 0:
+#         raise ValueError("Input graph is empty.")
+
+#     components = list(nx.connected_components(G))
+#     total_nodes = G.number_of_nodes()
+#     results = []
+
+#     fps_found = (
+#         sum("fingerprint" in data for n, data in G.nodes(data=True)),
+#         "of",
+#         G.number_of_nodes(),
+#     )
+#     print("Fingerprints found in nodes:", fps_found)
+
+#     for component in components:
+#         subgraph = G.subgraph(component)
+#         size_comp = len(component)
+#         edge_count_comp = subgraph.number_of_edges()
+
+#         # Isolated node (or component with no edges)
+#         if edge_count_comp == 0:
+#             score_comp = 1
+
+#         else:
+#             similarity_scores = []
+#             for u, v in subgraph.edges():
+#                 fps_u = subgraph.nodes[u].get("fingerprint")
+#                 fps_v = subgraph.nodes[v].get("fingerprint")
+
+#                 if fps_u is None or fps_v is None:
+#                     warnings.warn(
+#                         f"Missing fingerprint for edge ({u}, {v}); skipping this edge."
+#                     )
+#                     continue
+
+#                 sim_score = TanimotoSimilarity(fps_u, fps_v)
+#                 similarity_scores.append(sim_score)
+
+#             score_comp = (
+#                 sum(similarity_scores) / len(similarity_scores)
+#                 if similarity_scores
+#                 else 1
+#             )
+
+#         results.append((score_comp, size_comp))
+
+#     # Weighted average across components
+#     total_score = (
+#         sum(score * size for score, size in results if not pd.isna(score)) / total_nodes
+#     )
+#     return total_score
 
 
 def calculate_consistency_measurement(G: nx.Graph, key: str, attribute: str) -> float:
