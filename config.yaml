@@ -4,12 +4,12 @@
 # (e.g. `artemis-run --config config.yaml --mode target --scores modcosine`).
 # Everything that defines the experiment itself lives here.
 
-mode: seed   # global | seed | target — overridden by --mode. global needs no target class.
+mode: global   # global | seed | target — overridden by --mode. global needs no target class.
 
 paths:
-  mgf_file: "/Users/rtlortega/Documents/PhD/Secondment/matteosimone/Downloads/ARTEMIS_project/ARTEMIS_101.mgf"      # input .mgf
-  chem_file: "/Users/rtlortega/Documents/PhD/WP2/Code/arteMIS_Project/arteMIS/experiments/new_runs/Case_Study_NAICONS/CS_annotated_compounds_npclassifier.csv"     # csv: MS2Query results (global), seed annotations (seed), or class table (target)
-  out_dir: "/Users/rtlortega/Documents/PhD/WP2/Code/arteMIS_Project/arteMIS/experiments/tests/seed_mode"
+  mgf_file: ""      # input .mgf
+  chem_file: ""     # csv: MS2Query results (global), seed annotations (seed), or class table (target)
+  out_dir: "output"
 
 # Similarity score families to compute. `--scores modcosine,cosine` picks a
 # subset of these keys; anything not listed here can't be selected.

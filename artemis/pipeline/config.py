@@ -86,6 +86,14 @@ def load_config(
         scores = {k: scores[k] for k in wanted}
 
     paths = raw.get("paths", {})
+
+    mgf_file = paths.get("mgf_file", "")
+    chem_file = paths.get("chem_file", "")
+    if not mgf_file:
+        raise ValueError("input mgf_file must be set in the config.yaml")
+    if not chem_file:
+        raise ValueError("input chem_file must be set in the config.yaml")
+
     target = raw.get("target", {}) or {}
     preprocessing = raw.get("preprocessing", {}) or {}
     clean_peaks = bool(preprocessing.get("clean_peaks", False))
@@ -128,8 +136,8 @@ def load_config(
 
     return PipelineConfig(
         mode=mode,
-        mgf_file=paths.get("mgf_file", ""),
-        chem_file=paths.get("chem_file", ""),
+        mgf_file=mgf_file,
+        chem_file=chem_file,
         out_dir=paths.get("out_dir", "OUT_DIR"),
         scores=scores,
         chem_level=raw.get("chem_level", "npc_pathway_results"),
