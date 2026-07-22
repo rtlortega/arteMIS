@@ -20,7 +20,7 @@ def test_prepare_graph_class():
 
     # Prepare the graph
     G_prepared = prepare_graph_class(
-        G, df, key="feature_id", attribute="second_level_class"
+        G, df, feature_col="feature_id", attribute="second_level_class"
     )
 
     # Check if the attributes are correctly assigned
@@ -46,7 +46,7 @@ def test_prepare_graph_fps():
     df = pd.DataFrame(data)
 
     # Prepare the graph
-    G_prepared = prepare_graph_fps(G, df, key="feature_id", attribute="fps")
+    G_prepared = prepare_graph_fps(G, df, feature_col="feature_id", attribute="fps")
 
     # Check if the attributes are correctly assigned
     assert G_prepared.nodes["1"]["fps"] == "1111"
@@ -59,14 +59,16 @@ def test_prepare_graph_empty_inputs():
     df = pd.DataFrame()
 
     try:
-        prepare_graph_class(None, df, key="feature_id", attribute="second_level_class")
+        prepare_graph_class(
+            None, df, feature_col="feature_id", attribute="second_level_class"
+        )
     except ValueError as e:
         assert str(e) == "Graph and DataFrame must not be None."
     else:
         assert False, "Expected ValueError for None graph"
 
     try:
-        prepare_graph_fps(G, None, key="feature_id", attribute="fps")
+        prepare_graph_fps(G, None, feature_col="feature_id", attribute="fps")
     except ValueError as e:
         assert str(e) == "Graph and DataFrame must not be None."
     else:
