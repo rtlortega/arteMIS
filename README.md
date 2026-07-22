@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/artemis_logo.svg" alt="arteMIS logo" width="220"/>
+  <img src="docs/artemis_logo_white.svg" alt="arteMIS logo" width="220"/>
 </p>
 
 # arteMIS
