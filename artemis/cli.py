@@ -51,7 +51,7 @@ def main(argv=None) -> None:
         scores_override=args.scores,
         n_networks_override=args.n_networks,
     )
-    run(cfg)
+    run(cfg, args.config)
 
 
 if __name__ == "__main__":

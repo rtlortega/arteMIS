@@ -7,10 +7,14 @@ before merging into each network (_filter_chem_info below).
 """
 import json
 import os
+import shlex
+import shutil
+import sys
 import time
 
 import numpy as np
 import pandas as pd
+import yaml
 from scipy.stats import qmc
 from sklearn.preprocessing import StandardScaler
 
@@ -126,9 +130,42 @@ def _make_df_for_score(score_family: str, entries) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def run(cfg: PipelineConfig) -> None:
+def _save_run_metadata(cfg: PipelineConfig, config_path: str) -> None:
+    """Snapshot config.yaml and the effective run parameters into out_dir."""
+    dest_config = os.path.join(cfg.out_dir, "config.yaml")
+    if os.path.abspath(config_path) != os.path.abspath(dest_config):
+        shutil.copy2(config_path, dest_config)
+
+    try:
+        cpu_affinity = sorted(os.sched_getaffinity(0))
+    except AttributeError:
+        cpu_affinity = None
+
+    run_info = {
+        "command": " ".join(shlex.quote(a) for a in sys.argv),
+        "cpu_affinity": cpu_affinity,
+        "mode": cfg.mode,
+        "scores": list(cfg.scores),
+        "chem_level": cfg.chem_level,
+        "target_class": cfg.target_class,
+        "clean_peaks": cfg.clean_peaks,
+        "n_networks": cfg.param_space.n_networks,
+        "seed": cfg.param_space.seed,
+        "param_space": cfg.param_space.bounds,
+        "optimization": {
+            "maximize": cfg.optimization.maximize,
+            "minimize": cfg.optimization.minimize,
+            "weights": cfg.optimization.weights,
+        },
+    }
+    with open(os.path.join(cfg.out_dir, "run_info.yaml"), "w") as f:
+        yaml.safe_dump(run_info, f, sort_keys=False)
+
+
+def run(cfg: PipelineConfig, config_path: str = "config.yaml") -> None:
     t0 = time.time()
     os.makedirs(cfg.out_dir, exist_ok=True)
+    _save_run_metadata(cfg, config_path)
     print(f"Mode: {cfg.mode} | Scores: {list(cfg.scores)}")
 
     cleaned_spectra_file = os.path.join(cfg.out_dir, "cleaned_spectra.mgf")
