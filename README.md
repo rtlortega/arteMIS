@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/artemis_logo_white.png" alt="arteMIS logo" width="850"/>
+  <img src="docs/images/artemis_logo_white.png" alt="arteMIS logo" width="800"/>
 </p>
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Python](https://img.shields.io/badge/python-3.13%2B-informational.svg)](#installation)
