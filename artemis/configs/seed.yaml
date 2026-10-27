@@ -1,0 +1,41 @@
+# arteMIS method profile — SEED mode.
+#
+# The method is: preprocessing + sampling (LHS ranges) + optimization metrics.
+# Loaded automatically for `--mode seed`. Seed mode drops chem_level rows equal
+# to `unlabeled_value` before computing chemistry metrics; otherwise the method
+# matches global mode.
+#
+# Run (paths/scores/n_networks/chem-level come from the command line):
+#
+#   artemis-run --mode seed --mgf spectra.mgf --chem annotations.csv --out results/
+
+# 1. Preprocessing. true: high cleaning; false: harmonizing only (no extra cleaning).
+preprocessing:
+  clean_peaks: true
+
+# 2. Latin-hypercube sampling space. --n-networks sets how many are sampled.
+sampling:
+  seed: 27
+  param_space:
+    max_comp_size: [50, 200]
+    max_links: [5, 50]
+    cut_off: [0.55, 0.88]
+    matching_peaks: [2, 10]
+
+# Rows whose chem_level equals this value are treated as unlabeled and dropped.
+unlabeled_value: "No label"
+
+# 3. Metrics to optimize.
+optimization:
+  maximize:
+    - chem_net_avg_intra
+    - chem_consistency_measurement
+  minimize:
+    - top_isolated_nodes
+    - top_degree_cv
+    - top_component_size_gini
+  weights: {}
+
+# Metric names available in seed mode:
+#   topology:   top_degree_cv, top_isolated_nodes, top_component_size_gini
+#   chemistry:  chem_net_avg_intra, chem_net_avg_inter, chem_consistency_measurement
