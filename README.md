@@ -92,26 +92,46 @@ saved to `run_info.yaml` in the output directory.
 
 ## Input
 
-Paths are passed on the command line (`--mgf`, `--chem`, optional `--smiles`,
-`--out`). `--chem-level` selects the column driving the chemical optimisation
+### Spectra (`--mgf`) — always the MZmine GNPS/IIMN export
+
+arteMIS (matchms) always reads the spectra file exported from **MZmine**: the
+one named `*_iimn_gnps.mgf` (the IIMN / GNPS export). This is the **only**
+spectra file the pipeline reads, in **every** mode. In the demo it is
+[`demo/input/demo_spectra.mgf`](demo/input/demo_spectra.mgf).
+
+> ⚠️ **Do not** pass a SIRIUS-oriented `.mgf` (e.g. `demo/demo_300_sirius.mgf`).
+> That file is produced only to run SIRIUS in parallel and is in a format
+> matchms does not handle here — it is an input *to SIRIUS*, never to arteMIS.
+> The spectra and the SIRIUS annotations are two separate things.
+
+### Chemical info (`--chem`, optional `--smiles`)
+
+`--chem` is a table (`.csv` or `.tsv`) of features with their class labels.
+`--chem-level` selects the column that drives the chemical optimisation
 (default `npc_pathway_results` for MS2Query; use `NPC#pathway` for SIRIUS/CANOPUS).
-`--chem` and `--smiles` accept `.csv` or `.tsv`.
 
-### Global mode
-- `--mgf`: input spectra file
-- `--chem`: MS2Query results (class column selected by `--chem-level`, e.g. `npc_pathway_results`)
-- `--out`: output directory — all results are saved as a folder here
+The optimisation also needs a **SMILES** per feature:
 
-### Seed mode
-- `--mgf`: input spectra file
-- `--chem`: table of the subset of annotated features (class column via `--chem-level`; rows equal to `unlabeled_value` in `seed.yaml` are dropped)
-- `--out`: output directory
+- **MS2Query** keeps SMILES in the same results table, so `--chem` alone is enough.
+- **SIRIUS** splits them: class predictions live in the CANOPUS structure summary,
+  while SMILES live in the structure-identifications table. Pass the class table
+  to `--chem` and the structures to `--smiles`; arteMIS merges them on the feature
+  id (`feature_id`, or `mappingFeatureId` for SIRIUS).
 
-### Target mode
-- `--mgf`: input spectra file
-- `--chem`: any table (MS2Query or otherwise) with the full features and a column identifying the class
-- `--target-class`: the class to target and optimise for (implies `--mode target`)
-- `--out`: output directory
+### Modes
+
+| Mode | `--chem` holds… | Intention |
+|---|---|---|
+| **global** | all annotated features (e.g. full MS2Query results) | use everything you have |
+| **seed** | a small, high-confidence subset of annotations | start from a trusted core |
+| **target** | any table with a class column (also pass `--target-class`) | build the network around one class |
+
+**global and seed share the same method** — identical metrics and optimisation.
+The only difference is *intention*: **seed** starts from a few high-confidence
+annotations, **global** uses them all. (In seed mode, rows whose `--chem-level`
+value equals `unlabeled_value` in `seed.yaml` are dropped.)
+
+All runs also write to `--out`, the output directory (created if missing).
 
 ---
 
@@ -122,6 +142,63 @@ Paths are passed on the command line (`--mgf`, `--chem`, optional `--smiles`,
 - The top 3 graphs obtained with arteMIS
 - The results from all networks, in a JSON file
 - `top_configs.csv` — the top 10 configurations, with their parameters and metrics
+
+---
+
+## Demo
+
+A small dataset is bundled under [`demo/`](demo/) so you can try every mode.
+All runs use the same spectra file, [`demo/input/demo_spectra.mgf`](demo/input/demo_spectra.mgf)
+— the MZmine `*_iimn_gnps` export (see [Input](#input)). Run the commands from
+the repository root.
+
+### 1) MS2Query input
+
+MS2Query puts class predictions **and** SMILES in one table, so only `--chem` is needed.
+
+```bash
+# global — use all annotated features
+artemis --mgf demo/input/demo_spectra.mgf \
+    --chem demo/input/chem_file/demo_MS2Query.csv \
+    --out demo/tests/MS2Query_global
+
+# seed — start from the high-confidence subset
+artemis --mode seed --mgf demo/input/demo_spectra.mgf \
+    --chem demo/input/chem_file/MS2Query_demo_spectra_seed.csv \
+    --out demo/tests/MS2Query_seed
+
+# target — build the network around one class (quote multi-word names)
+artemis --target-class "Shikimates and Phenylpropanoids" \
+    --mgf demo/input/demo_spectra.mgf \
+    --chem demo/input/chem_file/demo_MS2Query.csv \
+    --out demo/tests/MS2Query_target
+```
+
+The seed table (`MS2Query_demo_spectra_seed.csv`) is produced by
+[`demo/generate_demo_seed_chem_file.ipynb`](demo/generate_demo_seed_chem_file.ipynb),
+which keeps only the MS2Query rows with `ms2query_model_prediction > 0.7`
+(294 → 50 features). As explained in [Input](#input), seed and global run the
+*same* method — the seed run just starts from that trusted subset.
+
+### 2) SIRIUS input
+
+SIRIUS splits class predictions (CANOPUS summary) from SMILES (structure
+identifications), so pass both files and set `--chem-level` to the CANOPUS column:
+
+```bash
+artemis --mgf demo/input/demo_spectra.mgf \
+    --chem demo/input/chem_file/demo_SIRIUS_canopus_structure_summary.csv \
+    --smiles demo/input/chem_file/demo_SIRIUS_structure_identifications.csv \
+    --chem-level "NPC#pathway" \
+    --out demo/tests/SIRIUS_global
+```
+
+`.tsv` versions of the SIRIUS tables sit in the same folder and work too (swap
+the `.csv` paths for their `.tsv` counterparts).
+
+> Reminder: `demo/demo_300_sirius.mgf` is **not** a valid `--mgf`. It exists only
+> for running SIRIUS and is never read by arteMIS — always use the MZmine
+> `*_iimn_gnps` spectra file.
 
 ---
 
