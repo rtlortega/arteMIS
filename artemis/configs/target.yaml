@@ -1,0 +1,41 @@
+# arteMIS method profile — TARGET mode.
+#
+# The method is: preprocessing + sampling (LHS ranges) + optimization metrics.
+# Loaded automatically for `--mode target`. Target mode optimises network
+# structure around one specific class, so it uses a different metric set.
+# The class to target is a per-run choice passed on the command line with
+# `--target-class` (which also implies `--mode target`):
+#
+#   artemis-run --target-class melleolides \
+#       --mgf spectra.mgf --chem class_table.csv --out results/
+
+# 1. Preprocessing. true: high cleaning; false: harmonizing only (no extra cleaning).
+preprocessing:
+  clean_peaks: true
+
+# 2. Latin-hypercube sampling space. --n-networks sets how many are sampled.
+sampling:
+  seed: 27
+  param_space:
+    max_comp_size: [50, 200]
+    max_links: [5, 50]
+    cut_off: [0.55, 0.88]
+    matching_peaks: [2, 10]
+
+# 3. Metrics to optimize.
+optimization:
+  maximize:
+    - chem_edge_purity_target_incident
+    - chem_component_purity_target_components
+    - chem_target_component_purity
+  minimize:
+    - top_isolated_nodes
+    - top_degree_cv
+    - top_component_size_gini
+  weights: {}
+
+# Metric names available in target mode:
+#   topology:   top_degree_cv, top_isolated_nodes, top_component_size_gini
+#   chemistry:  chem_edge_purity_target_incident,
+#               chem_component_purity_target_components,
+#               chem_target_component_purity

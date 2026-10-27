@@ -1,0 +1,49 @@
+# arteMIS method profile — GLOBAL mode (the default).
+#
+# This file defines *how* the pipeline behaves — the method. It holds exactly
+# three things:
+#   1. preprocessing  — how spectra are cleaned
+#   2. sampling        — the Latin-hypercube parameter ranges (and the seed)
+#   3. optimization    — which metrics are maximized / minimized
+#
+# Loaded automatically for `--mode global`; you usually don't need to edit it.
+# Everything about a specific *run* — input/output paths, mode, scores,
+# tolerance, n_networks, chem-level — is passed on the command line, e.g.:
+#
+#   artemis-run --mgf spectra.mgf --chem classes.csv --out results/ --n-networks 100
+#
+# Point `--config` at a copy of this file to use a customised method.
+
+# 1. Spectrum preprocessing applied before scoring.
+preprocessing:
+  clean_peaks: true   # true:  high cleaning — DEFAULT_FILTERS + CLEAN_PEAKS
+                      #        (mz range 0-1000, drop <0.1% relative-intensity peaks, cap at
+                      #        1000 peaks, require >=5 high-intensity peaks, denoise, drop
+                      #        profiled spectra).
+                      # false: harmonizing only (DEFAULT_FILTERS), no extra cleaning.
+
+# 2. Latin-hypercube sampling space. The number of networks sampled is set with
+#    --n-networks on the command line; `seed` keeps sampling reproducible.
+sampling:
+  seed: 27
+  param_space:
+    max_comp_size: [50, 200]
+    max_links: [5, 50]
+    cut_off: [0.55, 0.88]
+    matching_peaks: [2, 10]
+  # top_n per network is always max_links + 1 — not user-configurable.
+
+# 3. Metrics to optimize.
+optimization:
+  maximize:
+    - chem_net_avg_intra
+    - chem_consistency_measurement
+  minimize:
+    - top_isolated_nodes
+    - top_degree_cv
+    - top_component_size_gini
+  weights: {}   # optional per-metric override, e.g. {chem_consistency_measurement: 2.0}
+
+# Metric names available in global mode (invalid names error out at load time):
+#   topology:   top_degree_cv, top_isolated_nodes, top_component_size_gini
+#   chemistry:  chem_net_avg_intra, chem_net_avg_inter, chem_consistency_measurement
