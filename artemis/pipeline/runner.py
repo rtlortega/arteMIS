@@ -23,7 +23,7 @@ from matchms.filtering.default_pipelines import CLEAN_PEAKS, DEFAULT_FILTERS
 from matchms.filtering.SpectrumProcessor import SpectrumProcessor
 from matchms.importing import load_from_mgf
 from matchms.networking.networking_functions import get_top_hits
-from matchms.similarity.FlashSimilarity import CosineFlash
+from matchms.similarity.FlashSimilarity import FlashCosine
 
 from artemis.networking.SimilarityNetworkMod import SimilarityNetworkMod
 from artemis.pipeline.config import PipelineConfig
@@ -36,10 +36,10 @@ from artemis.utils.prepare_graph import prepare_graph_class, prepare_graph_fps
 # `matching_mode` defines what the score family *is*, so it stays fixed here;
 # `tolerance` is a tunable and comes from config.yaml (scores.<key>.tolerance).
 SCORE_FUNCTIONS = {
-    "modcosine": lambda tolerance: CosineFlash(
+    "modcosine": lambda tolerance: FlashCosine(
         matching_mode="hybrid", tolerance=tolerance
     ),
-    "cosine": lambda tolerance: CosineFlash(
+    "cosine": lambda tolerance: FlashCosine(
         matching_mode="fragment", tolerance=tolerance
     ),
 }
@@ -115,6 +115,26 @@ def _filter_chem_info(df: pd.DataFrame, cfg: PipelineConfig) -> pd.DataFrame:
     return df.copy()  # global: use every annotated-or-not row
 
 
+def _read_chem_table(path) -> pd.DataFrame:
+    """Read a chem table (csv/tsv) and normalize its feature-id column to 'feature_id'."""
+    df = pd.read_csv(
+        path,
+        sep="\t" if str(path).lower().endswith(".tsv") else ",",
+    )
+    feature_id_col = next(
+        (c for c in ("feature_id", "mappingFeatureId") if c in df.columns),
+        None,
+    )
+    if feature_id_col is None:
+        raise ValueError(
+            f"Feature key not recognized in {path!r}. "
+            f"Expected one of ['feature_id', 'mappingFeatureId']. "
+            f"Available columns: {list(df.columns)}"
+        )
+    df["feature_id"] = pd.to_numeric(df[feature_id_col], errors="coerce")
+    return df
+
+
 def _make_df_for_score(score_family: str, entries) -> pd.DataFrame:
     prefix_map = {"topology_metrics": "top_", "chemistry_metrics": "chem_"}
     rows = []
@@ -145,7 +165,11 @@ def _save_run_metadata(cfg: PipelineConfig, config_path: str) -> None:
         "command": " ".join(shlex.quote(a) for a in sys.argv),
         "cpu_affinity": cpu_affinity,
         "mode": cfg.mode,
-        "scores": list(cfg.scores),
+        "mgf_file": cfg.mgf_file,
+        "chem_file": cfg.chem_file,
+        "smiles_file": cfg.smiles_file,
+        "out_dir": cfg.out_dir,
+        "scores": {name: cfg.scores[name]["tolerance"] for name in cfg.scores},
         "chem_level": cfg.chem_level,
         "target_class": cfg.target_class,
         "clean_peaks": cfg.clean_peaks,
@@ -245,13 +269,29 @@ def run(cfg: PipelineConfig, config_path: str = "config.yaml") -> None:
     # -------------------------
     # Load chemical info
     # -------------------------
-    df_chem_info = pd.read_csv(
-        cfg.chem_file,
-        sep="\t" if str(cfg.chem_file).lower().endswith(".tsv") else ",",
-    )
-    df_chem_info["feature_id"] = pd.to_numeric(
-        df_chem_info["feature_id"], errors="coerce"
-    )
+    df_chem_info = _read_chem_table(cfg.chem_file)
+
+    # SIRIUS case: SMILES live in a separate file. Merge them in on feature_id.
+    # MS2Query case: smiles_file is unset (or == chem_file) -> SMILES already present.
+    if cfg.smiles_file and cfg.smiles_file != cfg.chem_file:
+        df_smiles = _read_chem_table(cfg.smiles_file)
+        if "smiles" not in df_smiles.columns:
+            raise ValueError(
+                f"smiles_file {cfg.smiles_file!r} has no 'smiles' column. "
+                f"Available columns: {list(df_smiles.columns)}"
+            )
+        df_chem_info = df_chem_info.merge(
+            df_smiles[["feature_id", "smiles"]],
+            on="feature_id",
+            how="left",
+        )
+
+    if "smiles" not in df_chem_info.columns:
+        raise ValueError(
+            "No 'smiles' column available. Provide it in chem_file, or set "
+            "paths.smiles_file to a file containing 'smiles'."
+        )
+
     if cfg.chem_level not in df_chem_info.columns:
         raise ValueError(
             f"chem_level column {cfg.chem_level!r} not found in chem_file {cfg.chem_file!r}. "

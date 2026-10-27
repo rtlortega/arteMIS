@@ -9,9 +9,8 @@ from artemis.pipeline.metrics import available_metric_columns
 
 VALID_MODES = ("global", "seed", "target")
 DEFAULT_TOLERANCE = 0.02
-DEFAULT_SCORES = {
-    "modcosine": {"label": "Modified Cosine", "tolerance": DEFAULT_TOLERANCE}
-}
+# Score families selectable with --scores. Must match SCORE_FUNCTIONS in runner.py.
+KNOWN_SCORES = ("modcosine", "cosine")
 DEFAULT_UNLABELED_VALUE = "No label"
 DEFAULT_PARAM_SPACE = {
     "max_comp_size": [10, 100],
@@ -44,6 +43,7 @@ class PipelineConfig:
     mode: str
     mgf_file: str
     chem_file: str
+    smiles_file: str | None
     out_dir: str
     scores: dict
     chem_level: str
@@ -56,62 +56,72 @@ class PipelineConfig:
 
 def load_config(
     path: str,
-    mode_override: str | None = None,
-    scores_override: str | None = None,
-    n_networks_override: int | None = None,
+    *,
+    mode: str,
+    mgf_file: str,
+    chem_file: str,
+    out_dir: str,
+    chem_level: str,
+    scores: str,
+    tolerance: float,
+    n_networks: int,
+    smiles_file: str | None = None,
+    target_class: str | None = None,
 ) -> PipelineConfig:
-    with open(path) as f:
-        raw = yaml.safe_load(f) or {}
+    """Build a PipelineConfig for one run.
 
-    mode = mode_override or raw.get("mode") or "global"
+    The *method* (preprocessing, LHS sampling space, optimization metrics) is
+    read from the yaml at `path`. Everything about this specific *run* — mode,
+    paths, chem_level, scores, tolerance, n_networks, target_class — is passed
+    in from the command line.
+    """
     if mode not in VALID_MODES:
         raise ValueError(f"mode must be one of {VALID_MODES}, got {mode!r}")
 
-    scores_raw = raw.get("scores") or DEFAULT_SCORES
-    scores = {
-        key: {
-            "label": val.get("label", key),
-            "tolerance": float(val.get("tolerance", DEFAULT_TOLERANCE)),
-        }
-        for key, val in scores_raw.items()
+    with open(path) as f:
+        raw = yaml.safe_load(f) or {}
+
+    # Paths, scores and n_networks used to live in the config; they are now
+    # command-line arguments. Warn so a stale config isn't silently ignored.
+    for stale, flag in (
+        ("paths", "--mgf/--chem/--out"),
+        ("scores", "--scores/--tolerance"),
+    ):
+        if stale in raw:
+            print(
+                f"Warning: the `{stale}:` block in {path} is ignored — it is now "
+                f"passed on the command line ({flag})."
+            )
+
+    # Selected score families, all sharing the command-line tolerance.
+    wanted = [s.strip() for s in scores.split(",") if s.strip()]
+    unknown = [s for s in wanted if s not in KNOWN_SCORES]
+    if unknown:
+        raise ValueError(
+            f"--scores {unknown} not recognized. Known score families: {list(KNOWN_SCORES)}"
+        )
+    if not wanted:
+        raise ValueError("--scores must name at least one score family")
+    scores_cfg = {
+        name: {"label": name, "tolerance": float(tolerance)} for name in wanted
     }
 
-    if scores_override:
-        wanted = [s.strip() for s in scores_override.split(",") if s.strip()]
-        unknown = [s for s in wanted if s not in scores]
-        if unknown:
-            raise ValueError(
-                f"--scores {unknown} not defined under `scores:` in {path}. Known: {list(scores)}"
-            )
-        scores = {k: scores[k] for k in wanted}
+    # Normalize the optional separate SMILES source (SIRIUS). When it equals
+    # chem_file or is empty, SMILES come from chem_file (e.g. MS2Query).
+    smiles_file = smiles_file or None
 
-    paths = raw.get("paths", {})
-
-    mgf_file = paths.get("mgf_file", "")
-    chem_file = paths.get("chem_file", "")
-    if not mgf_file:
-        raise ValueError("input mgf_file must be set in the config.yaml")
-    if not chem_file:
-        raise ValueError("input chem_file must be set in the config.yaml")
-
-    target = raw.get("target", {}) or {}
     preprocessing = raw.get("preprocessing", {}) or {}
     clean_peaks = bool(preprocessing.get("clean_peaks", False))
 
-    target_class = target.get("class") or None
     if mode == "target" and not target_class:
         raise ValueError(
-            "mode 'target' requires `target.class` to be set in the config"
+            "mode 'target' requires a target class (pass --target-class NAME)"
         )
 
     sampling = raw.get("sampling", {}) or {}
     param_space = ParamSpace(
         bounds=sampling.get("param_space", DEFAULT_PARAM_SPACE),
-        n_networks=int(
-            n_networks_override
-            if n_networks_override is not None
-            else sampling.get("n_networks", 100)
-        ),
+        n_networks=int(n_networks),
         seed=int(sampling.get("seed", 27)),
     )
 
@@ -138,11 +148,12 @@ def load_config(
         mode=mode,
         mgf_file=mgf_file,
         chem_file=chem_file,
-        out_dir=paths.get("out_dir", "OUT_DIR"),
-        scores=scores,
-        chem_level=raw.get("chem_level", "npc_pathway_results"),
+        smiles_file=smiles_file,
+        out_dir=out_dir,
+        scores=scores_cfg,
+        chem_level=chem_level,
         target_class=target_class,
-        unlabeled_value=target.get("unlabeled_value", DEFAULT_UNLABELED_VALUE),
+        unlabeled_value=raw.get("unlabeled_value", DEFAULT_UNLABELED_VALUE),
         clean_peaks=clean_peaks,
         param_space=param_space,
         optimization=OptimizationConfig(
