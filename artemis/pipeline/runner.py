@@ -23,7 +23,7 @@ from matchms.filtering.default_pipelines import CLEAN_PEAKS, DEFAULT_FILTERS
 from matchms.filtering.SpectrumProcessor import SpectrumProcessor
 from matchms.importing import load_from_mgf
 from matchms.networking.networking_functions import get_top_hits
-from matchms.similarity.FlashSimilarity import FlashCosine
+from matchms.similarity.FlashSimilarity import CosineFlash
 
 from artemis.networking.SimilarityNetworkMod import SimilarityNetworkMod
 from artemis.pipeline.config import PipelineConfig
@@ -36,10 +36,10 @@ from artemis.utils.prepare_graph import prepare_graph_class, prepare_graph_fps
 # `matching_mode` defines what the score family *is*, so it stays fixed here;
 # `tolerance` is a tunable and comes from config.yaml (scores.<key>.tolerance).
 SCORE_FUNCTIONS = {
-    "modcosine": lambda tolerance: FlashCosine(
+    "modcosine": lambda tolerance: CosineFlash(
         matching_mode="hybrid", tolerance=tolerance
     ),
-    "cosine": lambda tolerance: FlashCosine(
+    "cosine": lambda tolerance: CosineFlash(
         matching_mode="fragment", tolerance=tolerance
     ),
 }
@@ -245,7 +245,10 @@ def run(cfg: PipelineConfig, config_path: str = "config.yaml") -> None:
     # -------------------------
     # Load chemical info
     # -------------------------
-    df_chem_info = pd.read_csv(cfg.chem_file)
+    df_chem_info = pd.read_csv(
+        cfg.chem_file,
+        sep="\t" if str(cfg.chem_file).lower().endswith(".tsv") else ",",
+    )
     df_chem_info["feature_id"] = pd.to_numeric(
         df_chem_info["feature_id"], errors="coerce"
     )
