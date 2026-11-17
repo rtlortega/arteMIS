@@ -77,6 +77,19 @@ artemis --mgf demo/input/demo_spectra.mgf \
 - `--chem` — the chemical annotation table (here MS2Query results, which already contain SMILES).
 - `--out` — the output directory; results are written here ([see Outputs](#outputs)).
 
+If using the SIRIUS annotations you need a to specify a few more things:
+
+```bash
+artemis --mgf demo/input/demo_spectra.mgf \
+    --chem demo/input/chem_file/demo_SIRIUS_canopus_structure_summary.csv \
+    --smiles demo/input/chem_file/demo_SIRIUS_structure_identifications.csv \
+    --chem-level 'NPC#pathway' \
+    --out demo/tests/SIRIUS_global
+```
+
+- `--smiles` — the chemical structure representation used for fingerprints.
+- `--chem-level` — SIRIUS uses a different column name for the predicted pathway annotations.
+
 Mode defaults to `global`, scores to `modcosine`, and the number of sampled networks to `100`. See [Choosing a mode](#choosing-a-mode) and [Configuration](#configuration) to adapt it, and [Examples](#examples) for seed, target, and SIRIUS runs.
 
 ---
