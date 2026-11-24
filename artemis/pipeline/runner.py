@@ -20,10 +20,11 @@ from sklearn.preprocessing import StandardScaler
 
 from matchms import calculate_scores
 from matchms.filtering.default_pipelines import CLEAN_PEAKS, DEFAULT_FILTERS
-from matchms.filtering.SpectrumProcessor import SpectrumProcessor
-from matchms.importing import load_from_mgf
+from matchms.exporting import save_as_mgf
+from matchms.filtering.spectra_processor import ProcessingReport, SpectraProcessor
+from matchms.importing import load_ms2_dataset
 from matchms.networking.networking_functions import get_top_hits
-from matchms.similarity.FlashSimilarity import FlashCosine
+from matchms.similarity import CosineFlash
 
 from artemis.networking.SimilarityNetworkMod import SimilarityNetworkMod
 from artemis.pipeline.config import PipelineConfig
@@ -36,10 +37,10 @@ from artemis.utils.prepare_graph import prepare_graph_class, prepare_graph_fps
 # `matching_mode` defines what the score family *is*, so it stays fixed here;
 # `tolerance` is a tunable and comes from config.yaml (scores.<key>.tolerance).
 SCORE_FUNCTIONS = {
-    "modcosine": lambda tolerance: FlashCosine(
+    "modcosine": lambda tolerance: CosineFlash(
         matching_mode="hybrid", tolerance=tolerance
     ),
-    "cosine": lambda tolerance: FlashCosine(
+    "cosine": lambda tolerance: CosineFlash(
         matching_mode="fragment", tolerance=tolerance
     ),
 }
@@ -200,19 +201,20 @@ def run(cfg: PipelineConfig, config_path: str = "config.yaml") -> None:
     # -------------------------
     # Load and harmonize spectra
     # -------------------------
-    spectra_list = list(load_from_mgf(cfg.mgf_file))
+    spectra_list = list(load_ms2_dataset(cfg.mgf_file))
     print(f"Loaded {len(spectra_list)} spectra from MGF.")
     for idx, s in enumerate(spectra_list):
         if s.get("feature_id") is None:
             s.set("feature_id", idx + 1)
 
     filters = DEFAULT_FILTERS + CLEAN_PEAKS if cfg.clean_peaks else DEFAULT_FILTERS
-    cleaned_spectra, _ = SpectrumProcessor(filters).process_spectra(
-        spectra_list,
-        cleaned_spectra_file=cleaned_spectra_file,
-        create_report=True,
+    report = ProcessingReport()
+    cleaned_spectra = SpectraProcessor(filters).process_spectra(
+        spectra_list, processing_report=report
     )
+    print(report)
     print("Spectra left after harmonisation:", len(cleaned_spectra))
+    save_as_mgf(cleaned_spectra, cleaned_spectra_file, file_mode="w")
     feature_ids = [s.get("feature_id") for s in cleaned_spectra]
 
     # -------------------------
